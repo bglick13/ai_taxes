@@ -15,6 +15,7 @@ class MobileAgentNeuralNet(nn.Module):
         self._build_dnn()
         self._build_temporal_model()
         self._build_action_head()
+        self.obs = None
 
     def _build_cnn(self) -> nn.Module:
         layers = [nn.Conv2d(self.obs['world-map'].shape[0], 32, 3),
@@ -32,10 +33,11 @@ class MobileAgentNeuralNet(nn.Module):
         self.dnn = nn.Sequential(*layers)
 
     def _build_temporal_model(self) -> nn.Module:
-        return None
+        self.temporal_model = nn.LSTM(128, 128, 1)
+        self.hidden_cell = None
 
     def _build_action_head(self) -> nn.Module:
-        return None
+        self.action_head = nn.Linear(128, self.obs['action_mask'].shape)
 
     def _get_local_map(self):
         self.h = self.cnn(self.obs['world-map'])
