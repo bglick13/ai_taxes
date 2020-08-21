@@ -55,4 +55,4 @@ if __name__ == '__main__':
     env = foundation.make_env_instance(**env_config)
     model = MobileAgentNeuralNet
     trainer = PPO(env_config, model)
-    trainer.rollout(10, 100)
+    trainer.train(1, 10, 10, 1, 2)
