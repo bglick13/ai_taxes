@@ -4,6 +4,8 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from ai_economist import foundation
 from util.observation_batch import ObservationBatch
+from typing import Dict, List, Tuple
+from policies.base_neural_net import BaseNeuralNet
 
 
 class Memory(Dataset):
@@ -37,20 +39,25 @@ class Memory(Dataset):
 
 
 class PPO:
-    def __init__(self, env_config, model, lr=0.0003, gamma=0.998, clip_param=0.2, entropy_coef=0.025,
+    def __init__(self, env_config, models: Dict[Tuple[str], BaseNeuralNet], lr=0.0003, gamma=0.998, clip_param=0.2, entropy_coef=0.025,
                  value_loss_coef=0.05):
-        self.memory = Memory()
+        self.memory = dict()
         self.env_config = env_config
         env = foundation.make_env_instance(**env_config)
-        self.model = model()
-        # TODO: the best way to generalize this is probably to wrap the foundation env so that it returns a batch object
-        self.model.build_models(ObservationBatch(env.reset(), ['0', '1', '2', '3']))
+        self.models = dict()
+        obs = env.reset()
+        for key, value in models.items():
+            self.models[key] = value()
+            self.models[key].build_models(ObservationBatch(obs, key))
+            self.memory[key] = Memory()
         self.lr = lr
         self.gamma = gamma
         self.clip_param = clip_param
         self.entropy_coef = entropy_coef
         self.value_loss_coef = value_loss_coef
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        self.optimizers = dict()
+        for key, value in self.models.items():
+            self.optimizers[key] = torch.optim.Adam(value.parameters(), lr=self.lr)
 
     def compute_gae(self, next_value, rewards, masks, values, tau=0.95):
         values = values + [next_value]
@@ -62,9 +69,9 @@ class PPO:
             returns.insert(0, gae + values[step])
         return returns
 
-    def update(self, epochs, batch_size=1, shuffle=True, num_workers=0):
+    def update(self, key, epochs, batch_size=1, shuffle=True, num_workers=0):
         for _ in range(epochs):
-            dataloader = DataLoader(self.memory, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+            dataloader = DataLoader(self.memory[key], batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
             for i, batch in enumerate(dataloader):
                 world_maps, flat_inputs, actions, old_logprobs, rewards, predicted_values = batch
 
@@ -76,9 +83,9 @@ class PPO:
                 rewards = rewards.reshape(-1, 1)
 
                 obs_batch = ObservationBatch([world_maps.float(), flat_inputs.float()])
-                self.model(obs_batch)
-                entropy = self.model.dist.entropy().mean()
-                new_log_probs = self.model.dist.log_prob(actions)
+                self.models[key](obs_batch)
+                entropy = self.models[key].dist.entropy().mean()
+                new_log_probs = self.models[key].dist.log_prob(actions)
                 ratio = (new_log_probs - old_logprobs).exp()
                 surr1 = ratio * (rewards - predicted_values)
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * (rewards - predicted_values)
@@ -87,42 +94,43 @@ class PPO:
 
                 loss = self.value_loss_coef * critic_loss + actor_loss - self.entropy_coef * entropy
 
-                self.optimizer.zero_grad()
+                self.optimizers[key].zero_grad()
                 loss.backward()
-                self.optimizer.step()
+                self.optimizers[key].step()
 
-    def rollout(self, n_rollouts, num_steps):
+    def rollout(self, key, n_rollouts, num_steps):
         env = foundation.make_env_instance(**self.env_config)
         for rollout in range(n_rollouts):
             obs = env.reset()
             states, actions, logprobs, rewards, values, done = [], [], [], [], [], []
             for step in range(num_steps):
-                obs_batch = ObservationBatch(obs, ['0', '1', '2', '3'])
-                self.model(obs_batch)
-                a = self.model.dist.sample()
-                value = self.model.value.squeeze()
-                logprob = self.model.dist.log_prob(a)
+                obs_batch = ObservationBatch(obs, key)
+                self.models[key](obs_batch)
+                a = self.models[key].dist.sample()
+                value = self.models[key].value.squeeze()
+                logprob = self.models[key].dist.log_prob(a)
                 action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a.argmax(-1)))
                 next_obs, rew, is_done, info = env.step(action_dict)
 
                 states.append(obs_batch)
                 actions.append(a.argmax(-1))
                 logprobs.append(logprob)
-                rewards.append(np.array([rew[k] for k in ['0', '1', '2', '3']]))
+                rewards.append(np.array([rew[k] for k in key]))
                 values.append(value)
                 done.append(is_done['__all__'])
 
                 obs = next_obs
-            obs_batch = ObservationBatch(obs, ['0', '1', '2', '3'])
-            self.model(obs_batch)
-            next_value = self.model.value
+            obs_batch = ObservationBatch(obs, key)
+            self.models[key](obs_batch)
+            next_value = self.models[key].value
             discounted_rewards = self.compute_gae(next_value, rewards, done, values)
-            self.memory.add_trace(states, actions, logprobs, discounted_rewards, values)
+            self.memory[key].add_trace(states, actions, logprobs, discounted_rewards, values)
 
-    def train(self, n_training_steps, n_rollouts, num_steps_per_rollout, epochs_per_train_step, batch_size):
+    def train(self, key_order: List[Tuple[List[str], Dict]], n_training_steps):
         for it in range(n_training_steps):
-            self.rollout(n_rollouts // n_training_steps, num_steps_per_rollout)
-            self.update(epochs_per_train_step, batch_size)
-            self.memory.clear_memory()
+            for key, spec in key_order:
+                self.rollout(key, spec.get('n_rollouts'), spec.get('n_steps_per_rollout'))
+                self.update(spec.get('epochs_per_train_step'), spec.get('batch_size'))
+                self.memory[key].clear_memory()
 
 

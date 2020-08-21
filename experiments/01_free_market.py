@@ -53,6 +53,13 @@ if __name__ == '__main__':
     }
 
     env = foundation.make_env_instance(**env_config)
-    model = MobileAgentNeuralNet
-    trainer = PPO(env_config, model)
-    trainer.train(1, 10, 10, 1, 2)
+    mobile_agent_model = MobileAgentNeuralNet
+    agent_spec = {
+        ('0', '1', '2', '3'): mobile_agent_model
+    }
+    trainer = PPO(env_config, agent_spec)
+    train_spec = [
+        (('0', '1', '2', '3'),
+         {'n_rollouts': 100, 'n_steps_per_rollout': 100, 'epochs_per_train_step': 1, 'batch_size': 10})
+    ]
+    trainer.train(train_spec, 100)

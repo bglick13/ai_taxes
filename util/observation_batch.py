@@ -1,11 +1,11 @@
 import torch
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Tuple
 import numpy as np
 import pandas as pd
 
 
 class ObservationBatch:
-    def __init__(self, obs: Union[List, Dict], keys: List = None):
+    def __init__(self, obs: Union[List, Dict], keys: Union[List, Tuple] = None):
         self.keys = keys
         if isinstance(obs, list):
             self.batch_size = len(obs)
