@@ -1,6 +1,8 @@
 from ai_economist import foundation
+from optim.ppo import  PPO
+from policies.mobile_agent_neural_net import MobileAgentNeuralNet
 import numpy as np
-
+import pandas as pd
 
 if __name__ == '__main__':
 
@@ -22,7 +24,7 @@ if __name__ == '__main__':
             ('ContinuousDoubleAuction', {'max_num_orders': 5}),
             # (3) Movement and resource collection
             ('Gather', {}),
-            ('PeriodicBracketTax', {})
+            # ('PeriodicBracketTax', {})
         ],
 
         # ===== SCENARIO CLASS ARGUMENTS =====
@@ -51,4 +53,6 @@ if __name__ == '__main__':
     }
 
     env = foundation.make_env_instance(**env_config)
-    print(env.get_agent(0))
+    model = MobileAgentNeuralNet
+    trainer = PPO(env_config, model)
+    trainer.rollout(10, 100)

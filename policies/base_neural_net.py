@@ -2,6 +2,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
+import pandas as pd
+from util.observation_batch import ObservationBatch
 
 
 def cnn_output_shape_calculator(in_dim, kernel_size):
@@ -19,18 +21,18 @@ class BaseNeuralNet(nn.Module):
         self.obs = None
 
     def _build_cnn(self):
-        layers = [nn.Conv2d(self.obs['world-map'].shape[0], 32, 3),
+        layers = [nn.Conv2d(self.obs.world_map.shape[1], 32, 3),
                    nn.ReLU(),
                    nn.Conv2d(32, 64, 2),
                    nn.ReLU()]
         self.cnn = nn.Sequential(*layers)
-        self.cnn_output_shape = self.cnn(self.obs['world-map']).shape
+        self.cnn_output_shape = self.cnn(torch.FloatTensor(self.obs.world_map)).shape
 
     def _build_dnn(self):
-        layers = [nn.Linear(self.cnn_output_shape.view(-1, 1)[1], self.dnn),
-                  nn.ReLU,
-                  nn.Linear(self.dnn, self.dnn),
-                  nn.ReLU]
+        layers = [nn.Linear(int(np.array(self.cnn_output_shape[1:]).prod()) + self.obs.flat_inputs.shape[1], self.dnn_size),
+                  nn.ReLU(),
+                  nn.Linear(self.dnn_size, self.dnn_size),
+                  nn.ReLU()]
         self.dnn = nn.Sequential(*layers)
 
     def _build_temporal_model(self):
@@ -38,33 +40,31 @@ class BaseNeuralNet(nn.Module):
         self.hidden_cell = None
 
     def _build_action_head(self):
-        self.action_head = nn.Linear(self.lstm_size, self.obs['action_mask'].shape)
-        self.log_std = nn.Parameter(torch.zeros(1, self.obs['action_mask'].shape))
+        self.action_head = nn.Linear(self.lstm_size, self.obs['action_mask'].shape[1])
+        self.log_std = nn.Parameter(torch.zeros(1, self.obs['action_mask'].shape[1]))
 
     def _build_value_head(self):
         self.value_head = nn.Linear(self.lstm_size, 1)
 
+    def _batchify(self):
+        if isinstance(self.obs, dict):
+            self.obs = pd.DataFrame.from_dict(self.obs, orient='index').to_dict()  # Basically just transpose the dict
+
     def _get_local_map(self):
-        self.h = self.cnn(torch.cat([obs['world-map'] for obs in self.obs]))
+        self.h = self.cnn(torch.FloatTensor(self.obs.world_map))
 
     def _concat_state_space(self):
-        local_map = self.h.reshape(self.batch_size, -1)
-        other_obs = []
-        for obs in self.obs:
-            _other = []
-            for key, value in obs.items():
-                if isinstance(value, float) or len(np.array(value).shape) == 1:
-                    _other += value
-            other_obs.append(_other)
-
+        local_map = self.h.reshape(self.h.shape[0], -1)
+        other_obs = self.obs.flat_inputs
         other_obs = torch.FloatTensor(other_obs)
-        self.h = torch.cat((local_map, other_obs))
+        self.h = torch.cat((local_map, other_obs), 1)
 
     def _process_concat_state_space(self):
         self.h = self.dnn(self.h)
 
     def _update_temporal_model(self):
-        _, self.h = self.temporal_model(self.h)
+        _, self.h = self.temporal_model(self.h.unsqueeze(0))
+        self.h = self.h[0].squeeze()
 
     def _compute_actions(self):
         self.mu = self.action_head(self.h)
@@ -89,19 +89,14 @@ class BaseNeuralNet(nn.Module):
 
         self.h, self.mu, self.value, self.dist = None, None, None, None
 
-    def forward(self, obs):
-        if isinstance(obs, dict):
-            self.obs = [obs]
-            self.batch_size = 1
-        else:
-            self.obs = obs
-            self.batch_size = len(obs)
-        # if
+    def forward(self, obs: ObservationBatch):
+        self.obs = obs
         self._get_local_map()
         self._concat_state_space()
         self._process_concat_state_space()
         self._update_temporal_model()
         self._compute_actions()
+        self._compute_value()
         self.dist = torch.distributions.Normal(self.mu, self.log_std.exp().expand_as(self.mu))
 
     def act(self):

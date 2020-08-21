@@ -3,7 +3,7 @@ from torch import nn
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from ai_economist import foundation
-
+from util.observation_batch import ObservationBatch
 
 class Memory(Dataset):
     def __init__(self):
@@ -39,15 +39,19 @@ class Memory(Dataset):
 
 
 class PPO:
-    def __init__(self, env_config, model, lr, betas, gamma, clip_param):
+    def __init__(self, env_config, model, lr=0.0003, gamma=0.998, clip_param=0.2, entropy_coef=0.025,
+                 value_loss_coef=0.05):
         self.memory = Memory()
         self.env_config = env_config
-        self.model = model
+        env = foundation.make_env_instance(**env_config)
+        self.model = model()
+        self.model.build_models(ObservationBatch(env.reset(), ['0', '1', '2', '3']))
         self.lr = lr
-        self.betas = betas
         self.gamma = gamma
         self.clip_param = clip_param
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, betas=self.betas)
+        self.entropy_coef = entropy_coef
+        self.value_loss_coef = value_loss_coef
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
     def compute_gae(self, next_value, rewards, masks, values, tau=0.95):
         values = values + [next_value]
@@ -59,7 +63,7 @@ class PPO:
             returns.insert(0, gae + values[step])
         return returns
 
-    def train(self, epochs, batch_size=1, shuffle=True, num_workers=1):
+    def update(self, epochs, batch_size=1, shuffle=True, num_workers=1):
         for _ in range(epochs):
             dataloader = DataLoader(self.memory, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
             for i, batch in enumerate(dataloader):
@@ -73,7 +77,7 @@ class PPO:
                 actor_loss = - torch.min(surr1, surr2).mean()
                 critic_loss = (rewards - predicted_values).pow(2).mean()
 
-                loss = 0.5 * critic_loss + actor_loss - 0.001 * entropy
+                loss = self.value_loss_coef * critic_loss + actor_loss - self.entropy_coef * entropy
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -85,11 +89,22 @@ class PPO:
             obs = env.reset()
             states, actions, logprobs, rewards, values, done = [], [], [], [], [], []
             for step in range(num_steps):
-                action_dict = {}
-                # TODO: We can probably batchify this in the model definition for speedup
-                for agent_idx, agent_obs in obs.items():
-                    if agent_idx != 'p':  # We'll do the planner separately
-                        self.model(agent_obs)
-                        action_dict[agent_idx] = self.model.dist.sample()
+                obs_batch = ObservationBatch(obs, ['0', '1', '2', '3'])
+                self.model(obs_batch)
+                a = self.model.dist.sample()
+                value = self.model.value
+                logprob = self.model.dist.log_prob(a)
+                action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a.argmax(-1)))
+                next_obs, rew, is_done, info = env.step(action_dict)
+
+                states.append(obs_batch)
+                actions.append(a.argmax(-1))
+                logprobs.append(logprob)
+                rewards.append(rew)
+                values.append(value)
+                done.append(is_done)
+
+                obs = next_obs
+
 
 
