@@ -60,6 +60,6 @@ if __name__ == '__main__':
     trainer = PPO(env_config, agent_spec)
     train_spec = [
         (('0', '1', '2', '3'),
-         {'n_rollouts': 10, 'n_steps_per_rollout': 10, 'epochs_per_train_step': 1, 'batch_size': 2})
+         {'n_rollouts': 100, 'n_steps_per_rollout': 100, 'epochs_per_train_step': 1, 'batch_size': 1000})
     ]
     trainer.train(train_spec, 100)

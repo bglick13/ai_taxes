@@ -6,7 +6,7 @@ from ai_economist import foundation
 from util.observation_batch import ObservationBatch
 from typing import Dict, List, Tuple
 from policies.base_neural_net import BaseNeuralNet
-from tqdm import tqdm
+from tqdm import tqdm, trange
 import copy
 
 torch.autograd.set_detect_anomaly(True)
@@ -113,7 +113,9 @@ class PPO:
 
     def rollout(self, key, n_rollouts, num_steps):
         env = foundation.make_env_instance(**self.env_config)
-        for rollout in tqdm(range(n_rollouts), desc='Rollout'):
+        rewards = []
+        t = trange(n_rollouts, desc='Rollout', leave=True)
+        for rollout in t:
             obs = env.reset()
             states, actions, logprobs, rewards, values, done, hcs = [], [], [], [], [], [], []
             hc = (torch.zeros(1, len(key), self.models[key].lstm_size, device=self.device),
@@ -128,7 +130,6 @@ class PPO:
                 logprob = dist.log_prob(a).detach()
                 action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a.argmax(-1)))
                 next_obs, rew, is_done, info = env.step(action_dict)
-
                 states.append(obs_batch)
                 actions.append(a.argmax(-1).detach())
                 logprobs.append(logprob)
@@ -137,6 +138,8 @@ class PPO:
                 done.append(is_done['__all__'])
 
                 obs = next_obs
+            t.set_description(f'Rollout (Average Marginal Reward: {np.mean(rewards).round(3)})')
+            t.refresh()
             obs_batch = ObservationBatch(obs, key)
             _, next_value, hc = self.models[key](obs_batch, hc)
             next_value = next_value.detach().cpu().numpy()
