@@ -25,54 +25,58 @@ class BaseNeuralNet(nn.Module):
                    nn.ReLU(),
                    nn.Conv2d(32, 64, 2),
                    nn.ReLU()]
-        self.cnn = nn.Sequential(*layers)
-        self.cnn_output_shape = self.cnn(torch.FloatTensor(self.obs.world_map)).shape
+        self.cnn = nn.Sequential(*layers).to(self.device)
+        self.cnn_output_shape = self.cnn(torch.FloatTensor(self.obs.world_map).to(self.device)).shape
 
     def _build_dnn(self):
         layers = [nn.Linear(int(np.array(self.cnn_output_shape[1:]).prod()) + self.obs.flat_inputs.shape[1], self.dnn_size),
                   nn.ReLU(),
                   nn.Linear(self.dnn_size, self.dnn_size),
                   nn.ReLU()]
-        self.dnn = nn.Sequential(*layers)
+        self.dnn = nn.Sequential(*layers).to(self.device)
 
     def _build_temporal_model(self):
-        self.temporal_model = nn.LSTM(self.lstm_size, self.lstm_size, 1)
-        self.hidden_cell = None
+        self.temporal_model = nn.LSTM(self.lstm_size, self.lstm_size, 1).to(self.device)
 
     def _build_action_head(self):
-        self.action_head = nn.Linear(self.lstm_size, self.obs['action_mask'].shape[1])
-        self.log_std = nn.Parameter(torch.zeros(1, self.obs['action_mask'].shape[1]))
+        self.action_head = nn.Sequential(*[nn.Linear(self.lstm_size, self.obs['action_mask'].shape[1])]).to(self.device)
+        self.log_std = nn.Parameter(torch.zeros(1, self.obs['action_mask'].shape[1])).to(self.device)
 
     def _build_value_head(self):
-        self.value_head = nn.Linear(self.lstm_size, 1)
+        self.value_head = nn.Sequential(*[nn.Linear(self.lstm_size, 1)]).to(self.device)
 
     def _batchify(self):
         if isinstance(self.obs, dict):
             self.obs = pd.DataFrame.from_dict(self.obs, orient='index').to_dict()  # Basically just transpose the dict
 
     def _get_local_map(self):
-        self.h = self.cnn(torch.FloatTensor(self.obs.world_map))
+        h = self.cnn(torch.FloatTensor(self.obs.world_map).to(self.device))
+        return h
 
-    def _concat_state_space(self):
-        local_map = self.h.reshape(self.h.shape[0], -1)
+    def _concat_state_space(self, h):
+        local_map = h.reshape(h.shape[0], -1)
         other_obs = self.obs.flat_inputs
-        other_obs = torch.FloatTensor(other_obs)
-        self.h = torch.cat((local_map, other_obs), 1)
+        other_obs = torch.FloatTensor(other_obs).to(self.device)
+        h = torch.cat((local_map, other_obs), 1).to(self.device)
+        return h
 
-    def _process_concat_state_space(self):
-        self.h = self.dnn(self.h)
+    def _process_concat_state_space(self, h):
+        return self.dnn(h)
 
-    def _update_temporal_model(self):
-        _, self.h = self.temporal_model(self.h.unsqueeze(0))
-        self.h = self.h[0].squeeze()
+    def _update_temporal_model(self, h, prev_hc):
+        _, hc = self.temporal_model(h.unsqueeze(0), prev_hc)
+        return hc
 
-    def _compute_actions(self):
-        self.mu = self.action_head(self.h)
+    def _compute_actions(self, h):
+        mu = self.action_head(h)
+        std = self.log_std.exp().expand_as(mu)
+        dist = torch.distributions.Normal(mu, std)
+        return dist
 
-    def _compute_value(self):
-        self.value = self.value_head(self.h)
+    def _compute_value(self, h):
+        return self.value_head(h)
 
-    def __init__(self):
+    def __init__(self, device='cuda'):
         super().__init__()
         self.lstm_size = None
         self.dnn_size = None
@@ -87,17 +91,17 @@ class BaseNeuralNet(nn.Module):
         self.obs = None
         self.batch_size = None
 
-        self.h, self.mu, self.value, self.dist = None, None, None, None
+        self.device = device
 
-    def forward(self, obs: ObservationBatch):
+    def forward(self, obs: ObservationBatch, prev_hc=None):
         self.obs = obs
-        self._get_local_map()
-        self._concat_state_space()
-        self._process_concat_state_space()
-        self._update_temporal_model()
-        self._compute_actions()
-        self._compute_value()
-        self.dist = torch.distributions.Normal(self.mu, self.log_std.exp().expand_as(self.mu))
+        h = self._get_local_map()
+        h = self._concat_state_space(h)
+        h = self._process_concat_state_space(h)
+        hc = self._update_temporal_model(h, prev_hc)
+        dist = self._compute_actions(hc[0].squeeze())
+        value = self._compute_value(hc[0].squeeze())
+        return dist, value, hc
 
     def act(self):
         return F.softmax(self.h)

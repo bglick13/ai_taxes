@@ -10,7 +10,7 @@ def cnn_output_shape_calculator(in_dim, kernel_size):
 
 
 class MobileAgentNeuralNet(BaseNeuralNet):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, device='cuda'):
+        super().__init__(device)
         self.lstm_size = 128
         self.dnn_size = 128
