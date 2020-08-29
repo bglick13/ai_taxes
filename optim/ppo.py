@@ -77,7 +77,8 @@ class PPO:
             returns.insert(0, gae + values[step])
         return np.array(returns)
 
-    def update(self, key, epochs, batch_size=1, shuffle=True, num_workers=0):
+    def update(self, key, epochs, batch_size=1, shuffle=False, num_workers=0):
+        losses = []
         for epoch in range(epochs):
             dataloader = DataLoader(self.memory[key], batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
             for i, batch in enumerate(dataloader):
@@ -109,12 +110,13 @@ class PPO:
                 print(f'Epoch: {epoch} Loss: {loss}')
                 self.optimizers[key].zero_grad()
                 loss.backward()
+                losses.append(loss.detach().cpu().numpy())
                 self.optimizers[key].step()
+        return losses
 
     def rollout(self, key, n_rollouts, num_steps):
         env = foundation.make_env_instance(**self.env_config)
-        rewards = []
-        t = trange(n_rollouts, desc='Rollout', leave=True)
+        t = trange(n_rollouts, desc='Rollout')
         for rollout in t:
             obs = env.reset()
             states, actions, logprobs, rewards, values, done, hcs = [], [], [], [], [], [], []
@@ -138,8 +140,7 @@ class PPO:
                 done.append(is_done['__all__'])
 
                 obs = next_obs
-            t.set_description(f'Rollout (Average Marginal Reward: {np.mean(rewards).round(3)})')
-            t.refresh()
+
             obs_batch = ObservationBatch(obs, key)
             _, next_value, hc = self.models[key](obs_batch, hc)
             next_value = next_value.detach().cpu().numpy()
@@ -150,12 +151,13 @@ class PPO:
             self.memory[key].add_trace(states, actions, logprobs, discounted_rewards, advantage, hcs)
 
     def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps):
-        for it in range(n_training_steps):
-            print(f'Training step {it}/{n_training_steps}')
+        t = trange(n_training_steps, desc='Training Iteration', leave=True)
+        for it in t:
             for key, spec in key_order:
-                print(f'Training {key}')
                 self.rollout(key, spec.get('n_rollouts'), spec.get('n_steps_per_rollout'))
-                self.update(key, spec.get('epochs_per_train_step'), spec.get('batch_size'))
+                losses = self.update(key, spec.get('epochs_per_train_step'), spec.get('batch_size'))
                 self.memory[key].clear_memory()
+                t.set_description(f'Training Iteration (Average Reward: {np.mean(self.memory[key].rewards).round(3)}, Average Loss: {np.mean(losses).round(3)}')
+                t.refresh()
 
 
