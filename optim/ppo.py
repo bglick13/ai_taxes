@@ -139,9 +139,8 @@ class PPO:
             self.optimizers[key] = torch.optim.Adam(value.parameters(), lr=self.lr)
 
     def update(self, key, epochs, batch_size=1, shuffle=False, num_workers=0):
-        for p in self.models[key].parameters():
-            p.requires_grad = True
         losses = []
+        self.models[key].to('cuda')
         for epoch in range(epochs):
             dataloader = DataLoader(self.memory[key], batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
             for i, batch in enumerate(dataloader):
@@ -149,13 +148,13 @@ class PPO:
 
                 world_maps = world_maps.reshape(batch_size * world_maps.shape[1], world_maps.shape[2], world_maps.shape[3], world_maps.shape[4])
                 flat_inputs = flat_inputs.reshape(batch_size * flat_inputs.shape[1], flat_inputs.shape[2])
-                actions = actions.reshape(-1, 1)
-                old_logprobs = old_logprobs.reshape(batch_size * old_logprobs.shape[1], old_logprobs.shape[2])
+                actions = actions.reshape(-1, 1).to(self.device)
+                old_logprobs = old_logprobs.reshape(batch_size * old_logprobs.shape[1], old_logprobs.shape[2]).to(self.device)
                 advantages = torch.stack(advantages).reshape(-1, 1).to(self.device)
                 rewards = torch.stack(rewards).reshape(-1, 1).to(self.device)
-                hs = torch.stack([hc[0] for hc in hcs]).permute(1, 0, 2, 3)
+                hs = hcs[0].permute(1, 0, 2, 3).to(self.device)
                 hs = hs.reshape(hs.shape[0], hs.shape[1] * hs.shape[2], -1)
-                cs = torch.stack([hc[1] for hc in hcs]).permute(1, 0, 2, 3)
+                cs = hcs[1].permute(1, 0, 2, 3).to(self.device)
                 cs = cs.reshape(cs.shape[0], cs.shape[1] * cs.shape[2], -1)
                 hcs = (hs, cs)
 
@@ -184,7 +183,7 @@ class PPO:
                 constructor = self.model_key_to_constructor[key]
                 state_dict = self.models[key].to('cpu').state_dict()
                 result = mp.Pool(n_jobs).starmap(rollout, [(self.env_config, key, constructor, state_dict, 1, spec.get('n_steps_per_rollout')) for _ in range(spec.get('n_rollouts'))])
-                result = join_memories(result)
+                self.memory[key] = join_memories(result)
                 # self.rollout(key, spec.get('n_rollouts'), spec.get('n_steps_per_rollout'))
                 losses = self.update(key, spec.get('epochs_per_train_step'), spec.get('batch_size'))
                 self.memory[key].clear_memory()
