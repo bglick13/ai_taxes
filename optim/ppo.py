@@ -186,6 +186,7 @@ class PPO:
                 self.memory[key] = join_memories(result)
                 # self.rollout(key, spec.get('n_rollouts'), spec.get('n_steps_per_rollout'))
                 losses = self.update(key, spec.get('epochs_per_train_step'), spec.get('batch_size'))
+                torch.save(self.models[key].state_dict(), f'{key}_checkpoint_{it}.torch')
                 self.memory[key].clear_memory()
                 t.set_description(f'Training Iteration (Average Reward: {np.mean(self.memory[key].rewards).round(3)}, Average Loss: {np.mean(losses).round(3)}')
                 t.refresh()

@@ -3,7 +3,8 @@
 /workspace.xml
 
 .idea/
-tutorials/
 optim/__pycache__/
 
 *.pyc
+
+*.torch
