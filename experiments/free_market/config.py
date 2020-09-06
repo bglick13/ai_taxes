@@ -1,3 +1,5 @@
+experiment_name = 'free_market'
+
 env_config = {
         # ===== SCENARIO CLASS =====
         # Which Scenario class to use: the class's name in the Scenario Registry (foundation.scenarios).

@@ -190,9 +190,11 @@ class PPO:
                 self.optimizers[key].step()
         return losses, all_rewards
 
-    def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps, n_jobs=1):
+    def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps, experiment_name, n_jobs=1):
         writer = SummaryWriter()
         t = trange(n_training_steps, desc='Training Iteration', leave=True)
+        if not os.path.isdir(f'weights/temp'):
+            os.makedirs(f'weights/temp')
         for it in t:
             for key, spec in key_order:
                 constructor = self.model_key_to_constructor[key]
@@ -204,10 +206,12 @@ class PPO:
                 losses, all_rewards = self.update(key, spec.get('epochs_per_train_step'), spec.get('batch_size'))
                 writer.add_scalar('Loss/train', np.mean(losses), it)
                 writer.add_scalar('Reward/train', stack(all_rewards).mean().detach().cpu().numpy().round(3), it)
-                save(self.models[key].state_dict(), f'{key}_checkpoint_{it}.torch')
+                save(self.models[key].state_dict(), f'weights/temp/{key}_checkpoint_{it}.torch.temp')
                 t.set_description(f'Training Iteration (Average Reward: {stack(all_rewards).mean().detach().cpu().numpy().round(3)}, Average Loss: {np.mean(losses).round(3)}')
                 self.memory[key].clear_memory()
                 t.refresh()
+        for key, spec in key_order:
+            save(self.models[key].state_dict(), f'weights/{key}_final.torch')
 
     def eval(self):
         # TODO: Connor implement this. Can probably use rollout function above
