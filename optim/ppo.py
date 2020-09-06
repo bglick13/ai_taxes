@@ -4,11 +4,13 @@ from torch.optim import Adam
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from ai_economist import foundation
+from tutorials.utils.plotting import breakdown
 from util.observation_batch import ObservationBatch
 from typing import Dict, List, Tuple
 from policies.base_neural_net import BaseNeuralNet
 from tqdm import tqdm, trange
 from torch.utils.tensorboard import SummaryWriter
+from IPython import embed
 import torch.multiprocessing as mp
 import warnings
 import pickle
@@ -61,7 +63,7 @@ class Memory(Dataset):
         # del self.hcs[:]
 
 
-def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps):
+def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps, _eval=False):
     env = foundation.make_env_instance(**env_config)
     obs = env.reset()
     t = range(n_rollouts)
@@ -70,24 +72,31 @@ def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps):
     model.build_models(ObservationBatch(obs, key))
     model.load_state_dict(state_dict, strict=False)
     for rollout in t:
-        obs = env.reset()
+        obs = env.reset(force_dense_logging=_eval)
         states, actions, logprobs, rewards, values, done, hcs = [], [], [], [], [], [], []
         hc = (zeros(1, len(key), model.lstm_size, device='cpu'),
               zeros(1, len(key), model.lstm_size, device='cpu'))
         for step in range(num_steps):
             obs_batch = ObservationBatch(obs, key)
             hcs.append(hc)
-            dist, value, hc = model(obs_batch, hc)
-            hc = (hc[0].detach(), hc[1].detach())
-            # For deterministic, do dist.argmax(-1).detach()
+            # if _eval:
+            #     dist, value, hc = model(obs_batch, hc, det=True)
+            #     a = np.array(dist).reshape(-1,1)
+            #     action_dict = {i: a[i] for i in range(len(a))}
+            #     actions.append(a)
+            #     logprob = 0
+            # else:
+            dist, value, hc = model(obs_batch, hc, det=False)
             a = dist.sample().detach()
-            value = value.squeeze()
-            logprob = dist.log_prob(a).detach()
             action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a.argmax(-1)))
+            actions.append(a.argmax(-1).detach())
+            # print(actions)
+            logprob = dist.log_prob(a).detach()
+            logprobs.append(logprob)
+            hc = (hc[0].detach(), hc[1].detach())
+            value = value.squeeze()
             next_obs, rew, is_done, info = env.step(action_dict)
             states.append(obs_batch)
-            actions.append(a.argmax(-1).detach())
-            logprobs.append(logprob)
             rewards.append(np.array([rew[k] for k in key]))
             values.append(value)
             done.append(is_done['__all__'])
@@ -102,8 +111,10 @@ def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps):
         advantage = (discounted_rewards - values).tolist()
         discounted_rewards = discounted_rewards.tolist()
         memory.add_trace(states, actions, logprobs, discounted_rewards, advantage, hcs)
-        return memory
-
+        if _eval:
+            return memory, env.previous_episode_dense_log
+        else:
+            return memory
 
 def compute_gae(next_value, rewards, masks, values, tau=0.95, gamma=0.99):
     values = np.vstack((values, next_value.T))
@@ -213,9 +224,13 @@ class PPO:
         for key, spec in key_order:
             save(self.models[key].state_dict(), f'weights/{key}_final.torch')
 
-    def eval(self):
+    def eval(self, key_order: List[Tuple[Tuple, Dict]]):
         # TODO: Connor implement this. Can probably use rollout function above
-        pass
-
-
-
+        dense_logs = list()
+        for key, spec in key_order.items():
+            constructor = self.model_key_to_constructor[key]
+            state_dict = self.models[key].to('cpu').state_dict()
+            env, log = rollout(self.env_config, key, constructor, state_dict, n_rollouts=1, num_steps=1000, _eval=True)
+            dense_logs.append(log)
+            b = breakdown(log)
+        embed()

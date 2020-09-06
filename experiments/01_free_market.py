@@ -1,9 +1,13 @@
+import os, sys, argparse
+
+current_file_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(current_file_path, '..'))
+
 from ai_economist import foundation
 from optim.ppo import PPO
 from policies.mobile_agent_neural_net import MobileAgentNeuralNet
-
-if __name__ == '__main__':
-
+    
+def main(weight_file):
     env_config = {
         # ===== SCENARIO CLASS =====
         # Which Scenario class to use: the class's name in the Scenario Registry (foundation.scenarios).
@@ -56,8 +60,19 @@ if __name__ == '__main__':
         ('0', '1', '2', '3'): mobile_agent_model
     }
     trainer = PPO(env_config, agent_spec)
-    train_spec = [
-        (('0', '1', '2', '3'),
-         {'n_rollouts': 30, 'n_steps_per_rollout': 200, 'epochs_per_train_step': 16, 'batch_size': 3000})
-    ]
-    trainer.train(train_spec, 100, n_jobs=4)
+    if weight_file == None:
+        train_spec = [
+            (('0', '1', '2', '3'),
+             {'n_rollouts': 30, 'n_steps_per_rollout': 200, 'epochs_per_train_step': 16, 'batch_size': 3000})
+        ]
+        trainer.train(train_spec, 100, n_jobs=4)
+    else:
+        trainer.load_weights_from_file(weight_file)
+
+    trainer.eval(agent_spec)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-w', '--weight_file', type=str, default = None)
+    args = parser.parse_args()
+    main(args.weight_file)
