@@ -67,7 +67,9 @@ class BaseNeuralNet(nn.Module):
         _, hc = self.temporal_model(h.unsqueeze(0), prev_hc)
         return hc
 
-    def _compute_actions(self, h):
+    def _compute_actions(self, h, det=False):
+        if det:
+            return self.action_head(h).argmax()
         mu = self.action_head(h)
         std = self.log_std.exp().expand_as(mu)
         dist = torch.distributions.Normal(mu, std)
@@ -93,13 +95,13 @@ class BaseNeuralNet(nn.Module):
 
         self.device = device
 
-    def forward(self, obs: ObservationBatch, prev_hc=None):
+    def forward(self, obs: ObservationBatch, prev_hc=None, det=False):
         self.obs = obs
         h = self._get_local_map()
         h = self._concat_state_space(h)
         h = self._process_concat_state_space(h)
         hc = self._update_temporal_model(h, prev_hc)
-        dist = self._compute_actions(hc[0].squeeze())
+        dist = self._compute_actions(hc[0].squeeze(), det=det)
         value = self._compute_value(hc[0].squeeze())
         return dist, value, hc
 

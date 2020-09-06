@@ -4,7 +4,10 @@
 
 .idea/
 optim/__pycache__/
-
+*.out
 *.pyc
+experiments/runs/Sep05_13-28-52_DESKTOP-GBQN7M9/
 
-*.torch
+experiments/runs/Sep05_13-33-39_DESKTOP-GBQN7M9/
+
+*.0
