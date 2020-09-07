@@ -255,17 +255,26 @@ def header_str(n_agents):
 
 
 def report(c_trades, all_builds, n_agents, a_indices=None):
+    out_str = ""
     if a_indices is None:
         a_indices = list(range(n_agents))
     print(header_str(n_agents))
+    out_str = out_str + header_str(n_agents) + '\n'
     resources = ["Wood", "Stone"]
     if c_trades is not None:
         for resource in resources:
-            print(full_trade_str(c_trades, resource, a_indices, income=False))
+            _str = full_trade_str(c_trades, resource, a_indices, income=False)
+            print(_str)
+            out_str = out_str + _str + '\n'
         print("")
         for resource in resources:
-            print(full_trade_str(c_trades, resource, a_indices, income=True))
-    print(full_build_str(all_builds, a_indices))
+            _str = full_trade_str(c_trades, resource, a_indices, income=True) 
+            print(_str)
+            out_str = out_str + _str + '\n'
+    _str = full_build_str(all_builds, a_indices) 
+    print(_str)
+    out_str = out_str + _str + '\n\n'
+    return out_str
 
 
 def breakdown(log, remap_key=None):
@@ -352,7 +361,7 @@ def breakdown(log, remap_key=None):
 
     n_small = np.minimum(4, n)
 
-    report(c_trades, all_builds, n, aidx)
+    _report = report(c_trades, all_builds, n, aidx)
 
     cmap = plt.get_cmap("jet", n)
     rs = ["Wood", "Stone", "Coin"]
@@ -438,7 +447,7 @@ def breakdown(log, remap_key=None):
             ax.grid(b=True)
             ax.set_facecolor([0.3, 0.3, 0.3])
 
-    return (fig0, fig1, fig2), incomes, endows, c_trades, all_builds
+    return (fig0, fig1, fig2), incomes, endows, c_trades, all_builds, _report
 
 
 def plot_for_each_n(y_fun, n, ax=None):

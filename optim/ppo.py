@@ -116,7 +116,7 @@ def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps, _ev
         discounted_rewards = discounted_rewards.tolist()
         memory.add_trace(states, actions, logprobs, discounted_rewards, advantage, hcs)
         if _eval:
-            return memory, env.previous_episode_dense_log
+            return memory, env.previous_episode_dense_log, [agent.state['build_skill'] for agent in env.world.agents]
         else:
             return memory
 
@@ -240,14 +240,17 @@ class PPO:
         for key, spec in key_order.items():
             constructor = self.model_key_to_constructor[key]
             state_dict = self.models[key].to('cpu').state_dict()
-            env, log = rollout(self.env_config, key, constructor, state_dict, n_rollouts=1, num_steps=1000, _eval=True)
+            _, log, skills = rollout(self.env_config, key, constructor, state_dict, n_rollouts=1, num_steps=1000, _eval=True)
             dense_logs.append(log)
             b = breakdown(log)
 
         incomes = list(np.round(b[1]['Total'], 3))
+        percent_income_from_build = list(np.round(b[1]['Build']/b[1]['Total'], 3))
+        correlation = np.correlate(percent_income_from_build, skills, 'same')
         endowments = list(b[2])
         productivity = sum(incomes)
         equality = sum([log['rewards'][i]['p'] for i in range(len(log['rewards']))]) / productivity
+        # equality = foundation.scenarios.utils.get_equality(endowments)
         
         rewards = [[log['rewards'][i][agent] for i in range(len(log['rewards']))] for agent in log['rewards'][0].keys()]
         total_reward_per_timestep = [[rewards[0][0]],[rewards[1][0]],[rewards[2][0]],[rewards[3][0]]]
@@ -257,12 +260,14 @@ class PPO:
         total_reward_per_timestep = np.array(total_reward_per_timestep)
 
         with open(os.path.join(current_file_path, '..', 'experiments', 'free_market', 'logs', 'log.txt'), 'w+') as f:
-            log = (f"Total incomes: {incomes}\n" +
-                   f"Total endowments: {endowments}\n" +
+            log = (f"Agent incomes: {incomes}\n" +
+                   f"Agent endowments: {endowments}\n" +
+                   f"Agent Specialization coeff: {correlation}\n" +
                    f"Total productivity: {productivity}\n" +
                    f"Total equality: {equality}\n" + 
                    f"Total utility: {equality * productivity}\n" +
-                   f"Income breakdown:\n {b[1]}" 
+                   f"Income breakdown:\n{b[1]}\n\n" + 
+                   f"Activity breakdown:\n{b[-1]}" 
                 )
             f.write(log)
 
