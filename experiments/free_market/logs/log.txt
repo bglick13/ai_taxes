@@ -1,0 +1,7 @@
+Total incomes: [0.0, 19.472, 11.0, 19.995]
+Total endowments: [10, 29, 21, 29]
+Total productivity: 50.467
+Total equality: 0.1369620179094289
+Total utility: 6.912062157835149
+Income breakdown:
+ {'Sell Stone': [20, 321, 121, 291], 'Buy Stone': [-24, -316, -108, -305], 'Sell Wood': [51, 95, 69, 104], 'Buy Wood': [-47, -97, -71, -104], 'Build': [0, 16.472372947006132, 0, 33.99492187077029], 'Total': array([ 0.        , 19.47237295, 11.        , 19.99492187])}

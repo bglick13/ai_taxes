@@ -15,7 +15,10 @@ import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
 import warnings
 import pickle
-import os
+import os, sys
+
+current_file_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(current_file_path, '..'))
 warnings.filterwarnings("ignore")
 
 
@@ -159,7 +162,8 @@ class PPO:
 
     def load_weights_from_file(self):
         for key, value in self.models.items():
-            weights = load(os.path.join(f'weights/{key}_final.torch'))
+            weights = load(os.path.join(current_file_path, '..', 'experiments', 'free_market', 'weights', str(key)+'_final.torch'))    
+            #weights = load(os.path.join(f'weights/{key}_final.torch'))
             self.models[key].load_state_dict(weights)
 
     def update(self, key, epochs, batch_size=1, shuffle=False, num_workers=0):
@@ -235,16 +239,44 @@ class PPO:
             env, log = rollout(self.env_config, key, constructor, state_dict, n_rollouts=1, num_steps=1000, _eval=True)
             dense_logs.append(log)
             b = breakdown(log)
+
+        incomes = list(np.round(b[1]['Total'], 3))
+        endowments = list(b[2])
+        productivity = sum(incomes)
+        equality = sum([log['rewards'][i]['p'] for i in range(len(log['rewards']))]) / productivity
         
         rewards = [[log['rewards'][i][agent] for i in range(len(log['rewards']))] for agent in log['rewards'][0].keys()]
-        total_reward_per_timestep = [[rewards[0][0]],[rewards[1][0]],[rewards[2][0]],[rewards[3][0]],[rewards[4][0]]]
+        total_reward_per_timestep = [[rewards[0][0]],[rewards[1][0]],[rewards[2][0]],[rewards[3][0]]]
         for i in range(1, len(rewards[0])):
-            for j in range(len(rewards)):
+            for j in range(len(rewards)-1):
                 total_reward_per_timestep[j].append(rewards[j][i] + total_reward_per_timestep[j][i-1])
         total_reward_per_timestep = np.array(total_reward_per_timestep)
-        print(total_reward_per_timestep[:,-1])
+
+        with open(os.path.join(current_file_path, '..', 'experiments', 'free_market', 'logs', 'log.txt'), 'w+') as f:
+            log = (f"Total incomes: {incomes}\n" +
+                   f"Total endowments: {endowments}\n" +
+                   f"Total productivity: {productivity}\n" +
+                   f"Total equality: {equality}\n" + 
+                   f"Total utility: {equality * productivity}\n" +
+                   f"Income breakdown:\n {b[1]}" 
+                )
+            f.write(log)
+
         plt.clf()
-        for ls in total_reward_per_timestep:
-            plt.plot(ls)
-        # plt.show()
-        # embed()
+        fig, ax = plt.subplots()
+        ax.set_xlabel('Timestep', fontsize=14)
+        ax.set_ylabel('Cumulative Reward', fontsize=14)
+
+        ax.plot(total_reward_per_timestep[0], label='Agent 0')
+        ax.plot(total_reward_per_timestep[1], label='Agent 1')
+        ax.plot(total_reward_per_timestep[2], label='Agent 2')
+        ax.plot(total_reward_per_timestep[3], label='Agent 3')
+        
+        fig.tight_layout()
+        plt.grid(False)
+
+        ax.legend(loc='best', fontsize=14)
+        filepath = os.path.join(current_file_path, '..', 'experiments', 'free_market', 'logs', 'reward_graph.png')
+        plt.savefig(filepath)
+        plt.clf()
+        plt.close(fig)

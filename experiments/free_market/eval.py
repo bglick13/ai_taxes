@@ -1,3 +1,8 @@
+import os, sys
+
+current_file_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(current_file_path, '..', '..'))
+
 from ai_economist import foundation
 from optim.ppo import PPO
 from policies.mobile_agent_neural_net import MobileAgentNeuralNet
