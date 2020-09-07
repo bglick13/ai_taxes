@@ -60,7 +60,7 @@ def main(weight_file):
         ('0', '1', '2', '3'): mobile_agent_model
     }
     trainer = PPO(env_config, agent_spec)
-    if weight_file == None:
+    if weight_file is None:
         train_spec = [
             (('0', '1', '2', '3'),
              {'n_rollouts': 30, 'n_steps_per_rollout': 200, 'epochs_per_train_step': 16, 'batch_size': 3000})

@@ -157,9 +157,9 @@ class PPO:
         for key, value in self.models.items():
             self.optimizers[key] = Adam(value.parameters(), lr=self.lr)
 
-    def load_weights_from_file(self, experiment_name):
+    def load_weights_from_file(self):
         for key, value in self.models.items():
-            weights = load(os.path.join(f'experiments/{experiment_name}/weights/{key}_final.torch'))
+            weights = load(os.path.join(f'weights/{key}_final.torch'))
             self.models[key].load_state_dict(weights)
 
     def update(self, key, epochs, batch_size=1, shuffle=False, num_workers=0):
@@ -171,16 +171,19 @@ class PPO:
             for i, batch in enumerate(dataloader):
                 world_maps, flat_inputs, actions, old_logprobs, rewards, advantages, hcs = batch
                 all_rewards += rewards
+
+                # Reshape: Double check this is right
                 world_maps = world_maps.reshape(batch_size * world_maps.shape[1], world_maps.shape[2], world_maps.shape[3], world_maps.shape[4])
                 flat_inputs = flat_inputs.reshape(batch_size * flat_inputs.shape[1], flat_inputs.shape[2])
                 actions = actions.reshape(-1, 1).to(self.device)
                 old_logprobs = old_logprobs.reshape(batch_size * old_logprobs.shape[1], old_logprobs.shape[2]).to(self.device)
                 advantages = stack(advantages).reshape(-1, 1).to(self.device)
                 rewards = stack(rewards).reshape(-1, 1).to(self.device)
-                hs = hcs[0].permute(1, 0, 2, 3).to(self.device)
-                hs = hs.reshape(hs.shape[0], hs.shape[1] * hs.shape[2], -1)
-                cs = hcs[1].permute(1, 0, 2, 3).to(self.device)
-                cs = cs.reshape(cs.shape[0], cs.shape[1] * cs.shape[2], -1)
+                hs = hcs[0].squeeze()
+                cs = hcs[1].squeeze()
+                hs = hs.reshape(hs.shape[0] * hs.shape[1], hs.shape[2]).to(self.device).unsqueeze(0)  # (batch_size, n_agents, hidden_size)
+                cs = cs.reshape(cs.shape[0] * cs.shape[1], cs.shape[2]).to(self.device).unsqueeze(0)  # (batch_size, n_agents, hidden_size)
+
                 hcs = (hs, cs)
 
                 obs_batch = ObservationBatch([world_maps.float(), flat_inputs.float()])
