@@ -10,7 +10,8 @@ from typing import Dict, List, Tuple
 from policies.base_neural_net import BaseNeuralNet
 from tqdm import tqdm, trange
 from torch.utils.tensorboard import SummaryWriter
-from IPython import embed
+from IPython import embed 
+import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
 import warnings
 import pickle
@@ -90,7 +91,6 @@ def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps, _ev
             a = dist.sample().detach()
             action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a.argmax(-1)))
             actions.append(a.argmax(-1).detach())
-            # print(actions)
             logprob = dist.log_prob(a).detach()
             logprobs.append(logprob)
             hc = (hc[0].detach(), hc[1].detach())
@@ -225,7 +225,6 @@ class PPO:
             save(self.models[key].state_dict(), f'weights/{key}_final.torch')
 
     def eval(self, key_order: List[Tuple[Tuple, Dict]]):
-        # TODO: Connor implement this. Can probably use rollout function above
         dense_logs = list()
         for key, spec in key_order.items():
             constructor = self.model_key_to_constructor[key]
@@ -233,4 +232,16 @@ class PPO:
             env, log = rollout(self.env_config, key, constructor, state_dict, n_rollouts=1, num_steps=1000, _eval=True)
             dense_logs.append(log)
             b = breakdown(log)
-        embed()
+        
+        rewards = [[log['rewards'][i][agent] for i in range(len(log['rewards']))] for agent in log['rewards'][0].keys()]
+        total_reward_per_timestep = [[rewards[0][0]],[rewards[1][0]],[rewards[2][0]],[rewards[3][0]],[rewards[4][0]]]
+        for i in range(1, len(rewards[0])):
+            for j in range(len(rewards)):
+                total_reward_per_timestep[j].append(rewards[j][i] + total_reward_per_timestep[j][i-1])
+        total_reward_per_timestep = np.array(total_reward_per_timestep)
+        print(total_reward_per_timestep[:,-1])
+        plt.clf()
+        for ls in total_reward_per_timestep:
+            plt.plot(ls)
+        # plt.show()
+        # embed()
