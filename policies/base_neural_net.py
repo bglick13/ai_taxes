@@ -70,9 +70,8 @@ class BaseNeuralNet(nn.Module):
     def _compute_actions(self, h, det=False):
         if det:
             return self.action_head(h).argmax(-1)
-        mu = self.action_head(h)
-        std = self.log_std.exp().expand_as(mu)
-        dist = torch.distributions.Normal(mu, std)
+        mu = self.action_head(h).softmax(-1)
+        dist = torch.distributions.Categorical(mu)
         return dist
 
     def _compute_value(self, h):

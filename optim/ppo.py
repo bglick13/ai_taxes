@@ -1,6 +1,7 @@
 # import torch
 from torch import stack, zeros, clamp, min, save, load
 from torch.optim import Adam
+from torch.nn.utils import clip_grad_norm_
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from ai_economist import foundation
@@ -92,8 +93,8 @@ def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps, _ev
             # else:
             dist, value, hc = model(obs_batch, hc, det=False)
             a = dist.sample().detach()
-            action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a.argmax(-1)))
-            actions.append(a.argmax(-1).detach())
+            action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a))
+            actions.append(a.detach())
             logprob = dist.log_prob(a).detach()
             logprobs.append(logprob)
             hc = (hc[0].detach(), hc[1].detach())
@@ -119,7 +120,8 @@ def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps, _ev
         else:
             return memory
 
-def compute_gae(next_value, rewards, masks, values, tau=0.95, gamma=0.99):
+
+def compute_gae(next_value, rewards, masks, values, tau=0.98, gamma=0.998):
     values = np.vstack((values, next_value.T))
     gae = 0
     returns = []
@@ -180,7 +182,7 @@ class PPO:
                 world_maps = world_maps.reshape(batch_size * world_maps.shape[1], world_maps.shape[2], world_maps.shape[3], world_maps.shape[4])
                 flat_inputs = flat_inputs.reshape(batch_size * flat_inputs.shape[1], flat_inputs.shape[2])
                 actions = actions.reshape(-1, 1).to(self.device)
-                old_logprobs = old_logprobs.reshape(batch_size * old_logprobs.shape[1], old_logprobs.shape[2]).to(self.device)
+                old_logprobs = old_logprobs.reshape(batch_size * old_logprobs.shape[1], 1).to(self.device)
                 advantages = stack(advantages).reshape(-1, 1).to(self.device)
                 rewards = stack(rewards).reshape(-1, 1).to(self.device)
                 hs = hcs[0].squeeze()
@@ -203,8 +205,10 @@ class PPO:
                 loss = self.value_loss_coef * critic_loss + actor_loss - self.entropy_coef * entropy
                 # print(f'Epoch: {epoch} Loss: {loss}')
                 self.optimizers[key].zero_grad()
+                # clip_grad_norm_(self.models[key].parameters(), 10)
                 loss.backward()
                 losses.append(loss.detach().cpu().numpy())
+
                 self.optimizers[key].step()
         return losses, all_rewards
 
@@ -220,7 +224,7 @@ class PPO:
                 with mp.Pool(n_jobs) as pool:
                     result = pool.starmap(rollout, [(self.env_config, key, constructor, state_dict, 1, spec.get('n_steps_per_rollout')) for _ in range(spec.get('n_rollouts'))])
                 self.memory[key] = join_memories(result)
-                # self.rollout(key, spec.get('n_rollouts'), spec.get('n_steps_per_rollout'))
+
                 losses, all_rewards = self.update(key, spec.get('epochs_per_train_step'), spec.get('batch_size'))
                 writer.add_scalar('Loss/train', np.mean(losses), it)
                 writer.add_scalar('Reward/train', stack(all_rewards).mean().detach().cpu().numpy().round(3), it)
