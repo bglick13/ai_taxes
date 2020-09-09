@@ -1,7 +1,17 @@
-Total incomes: [0.0, 19.472, 11.0, 19.995]
-Total endowments: [10, 29, 21, 29]
-Total productivity: 50.467
-Total equality: 0.1369620179094289
-Total utility: 6.912062157835149
+Agent incomes: [2.0, 14.472, 3.0, 10.267]
+Agent endowments: [12, 24, 13, 20]
+Agent Specialization coeff: -0.41879020778888854
+Total productivity: 29.739
+Total equality: 0.12479186892062787
+Total utility: 3.7111853898305522
 Income breakdown:
- {'Sell Stone': [20, 321, 121, 291], 'Buy Stone': [-24, -316, -108, -305], 'Sell Wood': [51, 95, 69, 104], 'Buy Wood': [-47, -97, -71, -104], 'Build': [0, 16.472372947006132, 0, 33.99492187077029], 'Total': array([ 0.        , 19.47237295, 11.        , 19.99492187])}
+{'Sell Stone': [147, 166, 45, 98], 'Buy Stone': [-145, -171, -38, -102], 'Sell Wood': [125, 165, 87, 105], 'Buy Wood': [-125, -162, -91, -104], 'Build': [0, 16.472372947006132, 0, 13.267112338979295], 'Total': array([ 2.        , 14.47237295,  3.        , 10.26711234])}
+
+Activity breakdown:
+_______________:_ Agent  0 _____|_ Agent  1 _____|_ Agent  2 _____|_ Agent  3 ____
+Cost (Wood)    :   4.17 (n= 30) |   3.68 (n= 44) |   3.50 (n= 26) |   3.25 (n= 32)
+Cost (Stone)   :   5.18 (n= 28) |   5.34 (n= 32) |   4.22 (n=  9) |   6.00 (n= 17)
+Income (Wood)  :   3.38 (n= 37) |   3.75 (n= 44) |   3.62 (n= 24) |   3.89 (n= 27)
+Income (Stone) :   5.44 (n= 27) |   5.35 (n= 31) |   5.00 (n=  9) |   5.16 (n= 19)
+Income (Build) :    ~~~~~~~~    |  16.47 (n=  1) |    ~~~~~~~~    |  13.27 (n=  1)
+

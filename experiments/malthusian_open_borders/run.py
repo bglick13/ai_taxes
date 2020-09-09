@@ -1,6 +1,6 @@
 from optim.ppo import PPO
 from policies.mobile_agent_neural_net import MobileAgentNeuralNet
-from experiments.free_market.config import env_config, experiment_name
+from experiments.malthusian_open_borders.config import env_config, experiment_name
 
 if __name__ == '__main__':
     mobile_agent_model = MobileAgentNeuralNet
@@ -14,4 +14,4 @@ if __name__ == '__main__':
     ]
     n_epochs = 200
     print(f'Training for {train_spec[0][1]["n_rollouts"] * train_spec[0][1]["n_steps_per_rollout"] * len(train_spec[0][0]) * n_epochs} total steps')
-    trainer.train(train_spec, n_epochs, experiment_name, n_jobs=6)
+    trainer.train(train_spec, n_epochs, experiment_name, n_jobs=1)

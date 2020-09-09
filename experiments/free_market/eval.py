@@ -9,7 +9,6 @@ from policies.mobile_agent_neural_net import MobileAgentNeuralNet
 from experiments.free_market.config import env_config, experiment_name
 
 if __name__ == '__main__':
-    env = foundation.make_env_instance(**env_config)
     mobile_agent_model = MobileAgentNeuralNet
     agent_spec = {
         ('0', '1', '2', '3'): mobile_agent_model

@@ -1,7 +1,6 @@
 # import torch
 from torch import stack, zeros, clamp, min, save, load
 from torch.optim import Adam
-from torch.nn.utils import clip_grad_norm_
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from ai_economist import foundation
@@ -11,12 +10,15 @@ from typing import Dict, List, Tuple
 from policies.base_neural_net import BaseNeuralNet
 from tqdm import tqdm, trange
 from torch.utils.tensorboard import SummaryWriter
-from IPython import embed 
 import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
 import warnings
 import pickle
 import os, sys
+from scenarios import *
+from components import *
+from entities import *
+
 
 current_file_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(current_file_path, '..'))
@@ -115,10 +117,10 @@ def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps, _ev
         advantage = (discounted_rewards - values).tolist()
         discounted_rewards = discounted_rewards.tolist()
         memory.add_trace(states, actions, logprobs, discounted_rewards, advantage, hcs)
-        if _eval:
-            return memory, env.previous_episode_dense_log, [agent.state['build_skill'] for agent in env.world.agents]
-        else:
-            return memory
+    if _eval:
+        return memory, env.previous_episode_dense_log, [agent.state['build_skill'] for agent in env.world.agents]
+    else:
+        return memory
 
 
 def compute_gae(next_value, rewards, masks, values, tau=0.98, gamma=0.998):
@@ -221,8 +223,10 @@ class PPO:
             for key, spec in key_order:
                 constructor = self.model_key_to_constructor[key]
                 state_dict = self.models[key].to('cpu').state_dict()
+                rollouts_per_jobs = spec.get('rollouts_per_job', 1)
                 with mp.Pool(n_jobs) as pool:
-                    result = pool.starmap(rollout, [(self.env_config, key, constructor, state_dict, 1, spec.get('n_steps_per_rollout')) for _ in range(spec.get('n_rollouts'))])
+                    result = pool.starmap(rollout, [(self.env_config, key, constructor, state_dict, rollouts_per_jobs,
+                                                     spec.get('n_steps_per_rollout')) for _ in range(spec.get('n_rollouts'))])
                 self.memory[key] = join_memories(result)
 
                 losses, all_rewards = self.update(key, spec.get('epochs_per_train_step'), spec.get('batch_size'))
@@ -232,10 +236,12 @@ class PPO:
                 t.set_description(f'Training Iteration (Average Reward: {stack(all_rewards).mean().detach().cpu().numpy().round(3)}, Average Loss: {np.mean(losses).round(3)}')
                 self.memory[key].clear_memory()
                 t.refresh()
+            if (it+1) % 10 == 0:
+                self.eval(key_order, mode='a')
         for key, spec in key_order:
             save(self.models[key].state_dict(), f'weights/{key}_final.torch')
 
-    def eval(self, key_order: List[Tuple[Tuple, Dict]]):
+    def eval(self, key_order: List[Tuple[Tuple, Dict]], mode='w+'):
         dense_logs = list()
         for key, spec in key_order.items():
             constructor = self.model_key_to_constructor[key]
@@ -246,7 +252,7 @@ class PPO:
 
         incomes = list(np.round(b[1]['Total'], 3))
         percent_income_from_build = list(np.round(b[1]['Build']/b[1]['Total'], 3))
-        correlation = np.correlate(percent_income_from_build, skills, 'same')
+        correlation = np.corrcoef(percent_income_from_build, skills)[0, 1]
         endowments = list(b[2])
         productivity = sum(incomes)
         equality = sum([log['rewards'][i]['p'] for i in range(len(log['rewards']))]) / productivity
@@ -259,7 +265,7 @@ class PPO:
                 total_reward_per_timestep[j].append(rewards[j][i] + total_reward_per_timestep[j][i-1])
         total_reward_per_timestep = np.array(total_reward_per_timestep)
 
-        with open(os.path.join(current_file_path, '..', 'experiments', 'free_market', 'logs', 'log.txt'), 'w+') as f:
+        with open(os.path.join('logs', 'log.txt'), mode) as f:
             log = (f"Agent incomes: {incomes}\n" +
                    f"Agent endowments: {endowments}\n" +
                    f"Agent Specialization coeff: {correlation}\n" +
@@ -285,7 +291,7 @@ class PPO:
         plt.grid(False)
 
         ax.legend(loc='best', fontsize=14)
-        filepath = os.path.join(current_file_path, '..', 'experiments', 'free_market', 'logs', 'reward_graph.png')
+        filepath = os.path.join('logs', 'reward_graph.png')
         plt.savefig(filepath)
         plt.clf()
         plt.close(fig)
