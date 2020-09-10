@@ -680,38 +680,41 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         # TODO: Make this per nation
         out = dict()
 
-        n_observed_incomes = np.maximum(1, np.sum(list(self._occupancy.values())))
-        for c in self.bracket_cutoffs:
-            k = "{:03d}".format(int(c))
-            out["avg_bracket_rate/{}".format(k)] = np.mean(self._schedules[k])
-            out["bracket_occupancy/{}".format(k)] = (
-                self._occupancy[k] / n_observed_incomes
-            )
+        for nation in self.nations:
+            out[nation] = dict()
 
-        if not self.disable_taxes:
-            out["avg_effective_tax_rate"] = np.mean(self.all_effective_tax_rates)
-            out["total_collected_taxes"] = float(self.total_collected_taxes)
-
-            # Indices of richest and poorest agents
-            agent_coin_endows = np.array(
-                [agent.total_endowment("Coin") for agent in self.world.agents]
-            )
-            idx_poor = np.argmin(agent_coin_endows)
-            idx_rich = np.argmax(agent_coin_endows)
-
-            tax_days = self.taxes[(self.period - 1) :: self.period]
-            for i, tag in zip([idx_poor, idx_rich], ["poorest", "richest"]):
-                total_income = np.maximum(
-                    0, [tax_day[str(i)]["income"] for tax_day in tax_days]
-                ).sum()
-                total_tax_paid = np.sum(
-                    [tax_day[str(i)]["tax_paid"] for tax_day in tax_days]
+            n_observed_incomes = np.maximum(1, np.sum(list(self._occupancy[nation].values())))
+            for c in self.bracket_cutoffs:
+                k = "{:03d}".format(int(c))
+                out[nation]["avg_bracket_rate/{}".format(k)] = np.mean(self._schedules[nation][k])
+                out[nation]["bracket_occupancy/{}".format(k)] = (
+                    self._occupancy[nation][k] / n_observed_incomes
                 )
-                # Report the overall tax rate over the episode
-                # for the richest and poorest agents
-                out["avg_tax_rate/{}".format(tag)] = total_tax_paid / np.maximum(
-                    0.001, total_income
+
+            if not self.disable_taxes:
+                out[nation]["avg_effective_tax_rate"] = np.mean(self.all_effective_tax_rates[nation])
+                out[nation]["total_collected_taxes"] = float(self.total_collected_taxes[nation])
+
+                # Indices of richest and poorest agents
+                agent_coin_endows = np.array(
+                    [agent.total_endowment("Coin") for agent in self.world.agents if agent.state['nation'] == nation]
                 )
+                idx_poor = np.argmin(agent_coin_endows)
+                idx_rich = np.argmax(agent_coin_endows)
+
+                tax_days = self.taxes[(self.period - 1) :: self.period]
+                for i, tag in zip([idx_poor, idx_rich], ["poorest", "richest"]):
+                    total_income = np.maximum(
+                        0, [tax_day[str(i)]["income"] for tax_day in tax_days]
+                    ).sum()
+                    total_tax_paid = np.sum(
+                        [tax_day[str(i)]["tax_paid"] for tax_day in tax_days]
+                    )
+                    # Report the overall tax rate over the episode
+                    # for the richest and poorest agents
+                    out[nation]["avg_tax_rate/{}".format(tag)] = total_tax_paid / np.maximum(
+                        0.001, total_income
+                    )
 
         return out
 
