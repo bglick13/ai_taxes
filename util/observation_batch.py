@@ -2,7 +2,7 @@ import torch
 from typing import Union, List, Dict, Tuple
 import numpy as np
 import pandas as pd
-
+from pandas.api.types import is_numeric_dtype
 
 class ObservationBatch:
     def __init__(self, obs: Union[List, Dict], keys: Union[List, Tuple] = None):
@@ -23,6 +23,8 @@ class ObservationBatch:
             columns = []
             for c in self.obs.columns:
                 if '-' in c:
+                    if isinstance(self.obs[c].values[0], str):
+                        continue
                     if isinstance(self.obs[c].values[0], np.ndarray):
                         if len(self.obs[c].values[0].shape) > 1:
                             continue

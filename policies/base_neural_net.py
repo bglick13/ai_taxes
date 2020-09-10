@@ -70,7 +70,10 @@ class BaseNeuralNet(nn.Module):
     def _compute_actions(self, h, det=False):
         if det:
             return self.action_head(h).argmax(-1)
-        mu = self.action_head(h).softmax(-1)
+        mu = self.action_head(h)
+        action_mask = torch.FloatTensor(self.obs.action_mask).to(self.device)
+        mu *= action_mask
+        mu = mu.softmax(-1)
         dist = torch.distributions.Categorical(mu)
         return dist
 

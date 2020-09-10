@@ -88,6 +88,9 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         # enabled, which can be useful for controlled tax/no-tax comparisons.
         self.disable_taxes = bool(disable_taxes)
 
+        assert nations is not None, "Nations must be provided"
+        self.nations = nations
+
         # How to set taxes
         self.tax_model = tax_model
         assert self.tax_model in [
@@ -188,9 +191,8 @@ class MalthusianPeriodicBracketTax(BaseComponent):
             self._fixed_bracket_rates = None
 
         # === bracket tax rates ===
-        # self.curr_bracket_tax_rates = dict((n, np.zeros_like(self.bracket_cutoffs)) for n in self.world.planner.state['nations'])
-        # self.curr_rate_indices = dict((n, [0 for _ in range(self.n_brackets)]) for n in self.world.planner.state['nations'])
-
+        self.curr_bracket_tax_rates = dict((n, np.zeros_like(self.bracket_cutoffs)) for n in self.nations)
+        self.curr_rate_indices = dict((n, [0 for _ in range(self.n_brackets)]) for n in self.nations)
         # === tax cycle definitions ===
         self.tax_cycle_pos = 1
         self.last_coin = [0 for _ in range(self.n_agents)]
@@ -199,10 +201,19 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         self.last_marginal_rate = [0 for _ in range(self.n_agents)]
         self.last_effective_tax_rate = [0 for _ in range(self.n_agents)]
         # === trackers ===
-        # self.total_collected_taxes = dict((n, 0) for n in self.world.planner.state['nations'])
-        # self.all_effective_tax_rates = dict((n, []) for n in self.world.planner.state['nations'])
-        self._schedules = {"{:03d}".format(int(r)): [0] for r in self.bracket_cutoffs}
-        self._occupancy = {"{:03d}".format(int(r)): 0 for r in self.bracket_cutoffs}
+        self.total_collected_taxes = dict((n, 0) for n in self.nations)
+        self.all_effective_tax_rates = dict((n, []) for n in self.nations)
+        self._schedules = dict()
+        for nation, curr_marginal_rates_of_nation in self.curr_marginal_rates.items():
+            self._schedules[nation] = dict()
+            for curr_rate, bracket_cutoff in zip(curr_marginal_rates_of_nation, self.bracket_cutoffs):
+                self._schedules[nation]["{:03d}".format(int(bracket_cutoff))] = []
+
+        self._occupancy = dict()
+        for nation, curr_marginal_rates_of_nation in self.curr_marginal_rates.items():
+            self._occupancy[nation] = dict()
+            for curr_rate, bracket_cutoff in zip(curr_marginal_rates_of_nation, self.bracket_cutoffs):
+                self._occupancy[nation]["{:03d}".format(int(bracket_cutoff))] = 0
         self.taxes = []
 
         # === tax annealing ===
@@ -294,7 +305,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
     def curr_marginal_rates(self):
         """The current set of marginal tax bracket rates."""
         if self.use_discretized_rates:
-            return dict((n, self.disc_rates[self.curr_rate_indices[n]]) for n in self.world.planner.state['nations'])
+            return dict((n, self.disc_rates[self.curr_rate_indices[n]]) for n in self.nations)
 
         if self.tax_model == "us-federal-single-filer-2018-scaled":
             return np.minimum(
@@ -345,39 +356,36 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         bracket_bool = meets_min * under_max
         return self.curr_marginal_rates[nation][np.argmax(bracket_bool)]
 
-    def taxes_due(self, income):
+    def taxes_due(self, income, nation):
         """Return the total amount of taxes due at this income level."""
         past_cutoff = np.maximum(0, income - self.bracket_cutoffs)
         bin_income = np.minimum(self.bracket_sizes, past_cutoff)
-        bin_taxes = self.curr_marginal_rates * bin_income
+        bin_taxes = self.curr_marginal_rates[nation] * bin_income
         return np.sum(bin_taxes)
 
     def enact_taxes(self):
         """Calculate period income & tax burden. Collect taxes and redistribute."""
-        # TODO: All this
-        net_tax_revenue = 0
+        # TODO: enact taxes
+        net_tax_revenue = dict((n, 0) for n in self.nations)
         tax_dict = dict(
-            schedule=np.array(self.curr_marginal_rates),
+            schedule=self.curr_marginal_rates,
             cutoffs=np.array(self.bracket_cutoffs),
         )
-
-        for curr_rate, bracket_cutoff in zip(
-            self.curr_marginal_rates, self.bracket_cutoffs
-        ):
-            self._schedules["{:03d}".format(int(bracket_cutoff))].append(
-                float(curr_rate)
-            )
+        for nation, curr_marginal_rates_of_nation in self.curr_marginal_rates.items():
+            for curr_rate, bracket_cutoff in zip(curr_marginal_rates_of_nation, self.bracket_cutoffs):
+                self._schedules[nation]["{:03d}".format(int(bracket_cutoff))].append(float(curr_rate))
 
         self.last_income = []
         self.last_effective_tax_rate = []
         self.last_marginal_rate = []
         for agent, last_coin in zip(self.world.agents, self.last_coin):
             income = agent.total_endowment("Coin") - last_coin
-            tax_due = self.taxes_due(income)
+            nation = agent.state['nation']
+            tax_due = self.taxes_due(income, nation)
             effective_taxes = np.minimum(
                 agent.state["inventory"]["Coin"], tax_due
             )  # Don't take from escrow.
-            marginal_rate = self.marginal_rate(income)
+            marginal_rate = self.marginal_rate(income, nation)
             effective_tax_rate = float(effective_taxes / np.maximum(0.000001, income))
             tax_dict[str(agent.idx)] = dict(
                 income=float(income),
@@ -388,22 +396,26 @@ class MalthusianPeriodicBracketTax(BaseComponent):
 
             # Actually collect the taxes
             agent.state["inventory"]["Coin"] -= effective_taxes
-            net_tax_revenue += effective_taxes
+            net_tax_revenue[nation] += effective_taxes
 
             self.last_income.append(float(income))
             self.last_marginal_rate.append(float(marginal_rate))
             self.last_effective_tax_rate.append(effective_tax_rate)
 
-            self.all_effective_tax_rates.append(effective_tax_rate)
-            self._occupancy["{:03d}".format(int(self.income_bin(income)))] += 1
+            self.all_effective_tax_rates[nation].append(effective_tax_rate)
+            self._occupancy[nation]["{:03d}".format(int(self.income_bin(income)))] += 1
 
-        self.total_collected_taxes += float(net_tax_revenue)
-
-        lump_sum = net_tax_revenue / self.n_agents
-        for agent in self.world.agents:
-            agent.state["inventory"]["Coin"] += lump_sum
-            tax_dict[str(agent.idx)]["lump_sum"] = float(lump_sum)
-            self.last_coin[agent.idx] = float(agent.total_endowment("Coin"))
+        for nation, rev in net_tax_revenue.items():
+            self.total_collected_taxes[nation] += float(rev)
+        for nation in self.nations:
+            if self.world.planner.state['citizenship_count'][nation] == 0:
+                continue
+            lump_sum = net_tax_revenue[nation] / self.world.planner.state['citizenship_count'][nation]
+            for agent in self.world.agents:
+                if agent.state['nation'] == nation:
+                    agent.state["inventory"]["Coin"] += lump_sum
+                    tax_dict[str(agent.idx)]["lump_sum"] = float(lump_sum)
+                    self.last_coin[agent.idx] = float(agent.total_endowment("Coin"))
 
         self.taxes.append(tax_dict)
 
@@ -429,10 +441,11 @@ class MalthusianPeriodicBracketTax(BaseComponent):
             if self.tax_model == "model_wrapper" and not self.disable_taxes:
                 # For every bracket, the planner can select one of the discretized
                 # tax rates.
-                return [
-                    ("TaxIndexBracket_{:03d}".format(int(r)), self.n_disc_rates)
-                    for r in self.bracket_cutoffs
-                ]
+                out = []
+                for nation in self.nations:
+                    for r in self.bracket_cutoffs:
+                        out.append(("TaxIndexBracket_{}_{:03d}".format(nation, int(r)), self.n_disc_rates))
+                return out
 
         # Return 0 (no added actions) if the other conditions aren't met
         return 0
@@ -457,7 +470,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
             if self.tax_model == "model_wrapper":
                 self.set_new_period_rates_model()
 
-            self._curr_rates_obs = np.array(self.curr_marginal_rates)
+            self._curr_rates_obs = self.curr_marginal_rates
 
         # 2. On the last day of the tax period: Get $-taxes AND update agent endowments
         if self.tax_cycle_pos >= self.period:
@@ -646,8 +659,16 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         self.taxes = []
         self.total_collected_taxes = dict((n, 0) for n in self.world.planner.state['nations'])
         self.all_effective_tax_rates = dict((n, []) for n in self.world.planner.state['nations'])
-        self._schedules = {"{:03d}".format(int(r)): [] for r in self.bracket_cutoffs}
-        self._occupancy = {"{:03d}".format(int(r)): 0 for r in self.bracket_cutoffs}
+        self._schedules = dict()
+        for nation, curr_marginal_rates_of_nation in self.curr_marginal_rates.items():
+            self._schedules[nation] = dict()
+            for curr_rate, bracket_cutoff in zip(curr_marginal_rates_of_nation, self.bracket_cutoffs):
+                self._schedules[nation]["{:03d}".format(int(bracket_cutoff))] = []
+        self._occupancy = dict()
+        for nation, curr_marginal_rates_of_nation in self.curr_marginal_rates.items():
+            self._occupancy[nation] = dict()
+            for curr_rate, bracket_cutoff in zip(curr_marginal_rates_of_nation, self.bracket_cutoffs):
+                self._occupancy[nation]["{:03d}".format(int(bracket_cutoff))] = 0
         self._planner_masks = None
 
     def get_metrics(self):

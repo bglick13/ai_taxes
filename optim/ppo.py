@@ -84,18 +84,17 @@ def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps, _ev
         hc = (zeros(1, len(key), model.lstm_size, device='cpu'),
               zeros(1, len(key), model.lstm_size, device='cpu'))
         for step in range(num_steps):
+            # TODO: Fix the use of key here - I think we just need it to track what memories we need to store
             obs_batch = ObservationBatch(obs, key)
             hcs.append(hc)
-            # if _eval:
-            #     dist, value, hc = model(obs_batch, hc, det=True)
-            #     a = np.array(dist).reshape(-1,1)
-            #     action_dict = {i: a[i] for i in range(len(a))}
-            #     actions.append(a)
-            #     logprob = 0
-            # else:
+
             dist, value, hc = model(obs_batch, hc, det=False)
             a = dist.sample().detach()
             action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a))
+            # Take no-ops for the planner for now
+            action_dict['p'] = []
+            for ad_k, ad_v in env.all_agents[-1].action_dim.items():
+                action_dict['p'].append(0)
             actions.append(a.detach())
             logprob = dist.log_prob(a).detach()
             logprobs.append(logprob)
@@ -224,6 +223,9 @@ class PPO:
                 constructor = self.model_key_to_constructor[key]
                 state_dict = self.models[key].to('cpu').state_dict()
                 rollouts_per_jobs = spec.get('rollouts_per_job', 1)
+
+                rollout(self.env_config, key, constructor, state_dict, n_rollouts=1, num_steps=1000)
+
                 with mp.Pool(n_jobs) as pool:
                     result = pool.starmap(rollout, [(self.env_config, key, constructor, state_dict, rollouts_per_jobs,
                                                      spec.get('n_steps_per_rollout')) for _ in range(spec.get('n_rollouts'))])

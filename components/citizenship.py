@@ -24,6 +24,7 @@ class OpenBorderCitizenship(BaseComponent):
         self.nations_to_idx = dict((n, i) for i, n in enumerate(self.nations))
         self.idx_to_nations = dict((i, n) for i, n in enumerate(self.nations))
         self.relocate_on_immigrate = relocate_on_immigrate
+        self.citizenship_count = dict((n, 0) for n in self.nations)
 
     def get_n_actions(self, agent_cls_name):
         if agent_cls_name == 'BasicMobileAgent':
@@ -36,13 +37,15 @@ class OpenBorderCitizenship(BaseComponent):
             return {'nation': -1}
         elif agent_cls_name == 'BasicPlanner':
             return {'nations': self.nations,
-                    'nation_to_idx': self.nations_to_idx}
+                    'nation_to_idx': self.nations_to_idx,
+                    'idx_to_nation': self.idx_to_nations,
+                    'citizenship_count': self.citizenship_count}
         else:
             return {}
 
     def component_step(self):
         world = self.world
-        build = []
+        self.citizenship_count = dict((n, 0) for n in self.nations)
         # Apply any building actions taken by the mobile agents
         for agent in world.get_random_order_agents():
 
@@ -58,7 +61,7 @@ class OpenBorderCitizenship(BaseComponent):
 
             # Immigrate!
             elif 1 <= action <= self.n_nations + 1:
-                agent.state['nation'] = self.world.planner.idx_to_nation[action - 1]
+                agent.state['nation'] = self.world.planner.state['idx_to_nation'][action - 1]
                 agent.state['nation_idx'] = action - 1
                 # TODO: Implement logic to move agent to closest occupy-able location to nation's capitol
                 if self.relocate_on_immigrate:
@@ -66,8 +69,9 @@ class OpenBorderCitizenship(BaseComponent):
 
             else:
                 raise ValueError
-
-        self.builds.append(build)
+        for agent in world.agents:
+            self.citizenship_count[agent.state['nation']] += 1
+        self.world.planner.state['citizenship_count'] = self.citizenship_count
 
     def generate_observations(self):
         obs_dict = dict()
@@ -76,6 +80,7 @@ class OpenBorderCitizenship(BaseComponent):
                 "nation": agent.state["nation"],
                 "nation_idx": agent.state['nation_idx']
             }
+        obs_dict['p'] = dict(citizenship_count=self.citizenship_count)
 
         return obs_dict
 

@@ -248,11 +248,10 @@ class MalthusianUniform(BaseEnvironment):
                 labor_coefficient=self.energy_weight * self.energy_cost,
             )
         # (for the planner)
+        curr_optimization_metric['p'] = dict()
         for nation in self.world.planner.state['nations']:
             if self.planner_reward_type == "coin_eq_times_productivity":
-                curr_optimization_metric[
-                    self.world.planner.idx + nation
-                ] = rewards.coin_eq_times_productivity(
+                curr_optimization_metric[self.world.planner.idx][nation] = rewards.coin_eq_times_productivity(
                     coin_endowments=np.array(
                         [agent.total_endowment("Coin") for agent in self.world.agents if agent.state['nation'] == nation]
                     ),
@@ -260,7 +259,7 @@ class MalthusianUniform(BaseEnvironment):
                 )
             elif self.planner_reward_type == "inv_income_weighted_coin_endowments":
                 curr_optimization_metric[
-                    self.world.planner.idx + nation
+                    self.world.planner.idx][nation
                 ] = rewards.inv_income_weighted_coin_endowments(
                     coin_endowments=np.array(
                         [agent.total_endowment("Coin") for agent in self.world.agents if agent.state['nation'] == nation]
@@ -268,7 +267,7 @@ class MalthusianUniform(BaseEnvironment):
                 )
             elif self.planner_reward_type == "inv_income_weighted_utility":
                 curr_optimization_metric[
-                    self.world.planner.idx + nation
+                    self.world.planner.idx][nation
                 ] = rewards.inv_income_weighted_utility(
                     coin_endowments=np.array(
                         [agent.total_endowment("Coin") for agent in self.world.agents if agent.state['nation'] == nation]
@@ -609,10 +608,18 @@ class MalthusianUniform(BaseEnvironment):
         self.curr_optimization_metric = self.get_current_optimization_metrics()
 
         # reward = curr - prev objectives
-        rew = {
-            k: float(v - utility_at_end_of_last_time_step[k])
-            for k, v in self.curr_optimization_metric.items()
-        }
+        rew = dict()
+        for k, v in self.curr_optimization_metric.items():
+            if isinstance(v, dict):
+                rew[k] = dict()
+                for rew_k, rew_v in v.items():
+                    rew[k][rew_k] = rew_v - utility_at_end_of_last_time_step[k][rew_k]
+            else:
+                rew[k] = v - utility_at_end_of_last_time_step[k]
+        # rew = {
+        #     k: float(v - utility_at_end_of_last_time_step[k])
+        #     for k, v in self.curr_optimization_metric.items()
+        # }
 
         # store the previous objective values
         self.prev_optimization_metric.update(utility_at_end_of_last_time_step)
@@ -669,25 +676,25 @@ class MalthusianUniform(BaseEnvironment):
         utilities = np.array(
             [self.curr_optimization_metric[agent.idx] for agent in self.world.agents]
         )
-        nationalities = np.array([self.planner.nations_to_idx[agent.state['nation']] for agent in self.world.agents])
-        for nation in self.world.planner.nations:
+        nationalities = np.array([self.world.planner.state['nation_to_idx'][agent.state['nation']] for agent in self.world.agents])
+        for nation in self.world.planner.state['nations']:
             metrics[f"social/productivity_{nation}"] = social_metrics.get_productivity(
-                coin_endowments[nationalities == self.world.planner.nations_to_idx[nation]]
+                coin_endowments[nationalities == self.world.planner.state['nation_to_idx'][nation]]
             )
-            metrics[f"social/equality_{nation}"] = social_metrics.get_equality(coin_endowments[nationalities == self.world.planner.nations_to_idx[nation]])
+            metrics[f"social/equality_{nation}"] = social_metrics.get_equality(coin_endowments[nationalities == self.world.planner.state['nation_to_idx'][nation]])
 
             metrics[
                 f"social_welfare/coin_eq_times_productivity_{nation}"
             ] = rewards.coin_eq_times_productivity(
-                coin_endowments=coin_endowments[nationalities == self.world.planner.nations_to_idx[nation]], equality_weight=1.0
+                coin_endowments=coin_endowments[nationalities == self.world.planner.state['nation_to_idx'][nation]], equality_weight=1.0
             )
             metrics[
                 f"social_welfare/inv_income_weighted_coin_endow_{nation}"
-            ] = rewards.inv_income_weighted_coin_endowments(coin_endowments=coin_endowments[nationalities == self.world.planner.nations_to_idx[nation]])
+            ] = rewards.inv_income_weighted_coin_endowments(coin_endowments=coin_endowments[nationalities == self.world.planner.state['nation_to_idx'][nation]])
             metrics[
                 f"social_welfare/inv_income_weighted_utility_{nation}"
             ] = rewards.inv_income_weighted_utility(
-                coin_endowments=coin_endowments[nationalities == self.world.planner.nations_to_idx[nation]], utilities=utilities[nationalities == self.world.planner.nations_to_idx[nation]]
+                coin_endowments=coin_endowments[nationalities == self.world.planner.state['nation_to_idx'][nation]], utilities=utilities[nationalities == self.world.planner.state['nation_to_idx'][nation]]
             )
 
         for agent in self.all_agents:

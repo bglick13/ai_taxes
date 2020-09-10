@@ -1,5 +1,5 @@
 experiment_name = 'malthusian_open_borders'
-
+nations = ['foo_land', 'bar_land']
 env_config = {
         # ===== SCENARIO CLASS =====
         # Which Scenario class to use: the class's name in the Scenario Registry (foundation.scenarios).
@@ -18,8 +18,8 @@ env_config = {
             ('ContinuousDoubleAuction', {'max_num_orders': 5}),
             # (3) Movement and resource collection
             ('Gather', {}),
-            ("OpenBorderCitizenship", {}),
-            ('MalthusianPeriodicBracketTax', {})
+            ("OpenBorderCitizenship", {'nations': nations}),
+            ('MalthusianPeriodicBracketTax', {'nations': nations})
         ],
 
         # ===== SCENARIO CLASS ARGUMENTS =====
