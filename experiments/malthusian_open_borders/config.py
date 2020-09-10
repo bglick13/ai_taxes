@@ -42,5 +42,5 @@ env_config = {
         'flatten_observations': False,
         # When Flattening masks, concatenate each action subspace mask into a single array.
         # Note: flatten_masks = True is required for masking action logits in the code below.
-        'flatten_masks': True,
+        'flatten_masks': False,
     }
