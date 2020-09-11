@@ -958,12 +958,12 @@ class MalthusianQuadrant(MalthusianUniform):
         super().__init__(*args, **kwargs)
         width = self.world_size[1]
         height = self.world_size[0]
-        self.zones = [
+        self.zones = np.array([
             ((0,0), (width/2, 0), (0, height/2), (width/2, height/2)),
             ((width/2 + 1,0), (width, 0), (width/2 + 1, height/2), (width, height/2)),
             ((0,height/2+1), (width/2, height/2+1), (0, height), (width/2, height)),
             ((width/2+1,height/2+1), (width, height/2+1), (width/2+1,height), (width, height))
-        ]
+        ], np.int64)
 
         o0 = 0.2
         o1 = 0.35
@@ -1067,7 +1067,6 @@ class MalthusianQuadrant(MalthusianUniform):
                 self.world.capital_locations[nations[i]] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
 
 
-
     def reset_agent_state(self):
         """
         Reset the starting layout of the agents themselves (i.e. inventory, locations, etc.).
@@ -1095,16 +1094,18 @@ class MalthusianQuadrant(MalthusianUniform):
 
         for agent in self.world.get_random_order_agents():
             agent_nation_capital_loc = self.world.capital_locations[agent.state['nation']]
-            r = np.random.randint(0, self.world_size[0] / len(self.capital_locations))
-            c = np.random.randint(0, self.world_size[1] / len(self.capital_locations))
+            r = agent_nation_capital_loc[0] + np.random.randint(0, 2)
+            c = agent_nation_capital_loc[1] + np.random.randint(0, 2)
+            
             n_tries = 0
 
             # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
             #       This could happen if width != height. 
             while not self.world.can_agent_occupy(r, c, agent):
-                r = np.random.randint(0, self.world_size[0] / len(self.capital_locations))
-                c = np.random.randint(0, self.world_size[1] / len(self.capital_locations))
+                r = agent_nation_capital_loc[0] + np.random.randint(0, 2)
+                c = agent_nation_capital_loc[1] + np.random.randint(0, 2)
                 n_tries += 1
                 if n_tries > 200:
                     raise TimeoutError
+                    
             self.world.set_agent_loc(agent, r, c)
