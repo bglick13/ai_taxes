@@ -69,6 +69,8 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         disable_taxes=False,
         tax_model="model_wrapper",
         nations=None,
+        nations_to_idx=None,
+        idx_to_nations=None,
         period=100,
         rate_min=0.0,
         rate_max=1.0,
@@ -90,6 +92,8 @@ class MalthusianPeriodicBracketTax(BaseComponent):
 
         assert nations is not None, "Nations must be provided"
         self.nations = nations
+        self.nations_to_idx = nations_to_idx
+        self.idx_to_nations = idx_to_nations
 
         # How to set taxes
         self.tax_model = tax_model
@@ -197,7 +201,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         self.tax_cycle_pos = 1
         self.last_coin = [0 for _ in range(self.n_agents)]
         self.last_income = [0 for _ in range(self.n_agents)]
-        self.last_nationality = [-1 for a in self.world.agents]
+        self.last_nationality = [0 for a in self.world.agents]
         self.last_marginal_rate = [0 for _ in range(self.n_agents)]
         self.last_effective_tax_rate = [0 for _ in range(self.n_agents)]
         # === trackers ===
@@ -535,7 +539,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
                 is_first_day=is_first_day,
                 tax_phase=tax_phase,
                 last_incomes=self._last_income_obs_sorted,
-                last_nationalities=self._last_income_nationality_obs_sorted,
+                last_nationalities=[self.nations_to_idx[n] for n in self._last_income_nationality_obs_sorted],
                 curr_rates=_curr_rates_obs,  # A flat list of the curr rates of each nation appended in order
                 marginal_rate=curr_marginal_rate,  # The agent's current marginal tax rate
             )
@@ -646,6 +650,8 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         self.last_coin = [
             float(agent.total_endowment("Coin")) for agent in self.world.agents
         ]
+        self.last_nationality = [a.state['nation'] for a in self.world.agents]
+
         self.last_income = [0 for _ in range(self.n_agents)]
         self.last_marginal_rate = [0 for _ in range(self.n_agents)]
         self.last_effective_tax_rate = [0 for _ in range(self.n_agents)]

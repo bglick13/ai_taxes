@@ -1064,7 +1064,7 @@ class MalthusianQuadrant(MalthusianUniform):
             nations = self.world.planner.state['nations']
             for i in range(len(nations)):
                 zone = self.zones[i]
-                self.world.capital_locations[nations[i]] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
+                self.world.capital_locations[nations[i]] = (int((zone[0][0] + zone[1][0])/2),int((zone[0][1] + zone[2][1])/2))
 
 
     def reset_agent_state(self):
@@ -1094,16 +1094,16 @@ class MalthusianQuadrant(MalthusianUniform):
 
         for agent in self.world.get_random_order_agents():
             agent_nation_capital_loc = self.world.capital_locations[agent.state['nation']]
-            r = agent_nation_capital_loc[0] + np.random.randint(0, 2)
-            c = agent_nation_capital_loc[1] + np.random.randint(0, 2)
+            r = agent_nation_capital_loc[0] + np.random.randint(-1, 2)
+            c = agent_nation_capital_loc[1] + np.random.randint(-1, 2)
             
             n_tries = 0
 
-            # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
+            # TODO: Make sure that an agent cannot spawn in a different nation's zone(s).
             #       This could happen if width != height. 
             while not self.world.can_agent_occupy(r, c, agent):
-                r = agent_nation_capital_loc[0] + np.random.randint(0, 2)
-                c = agent_nation_capital_loc[1] + np.random.randint(0, 2)
+                r = agent_nation_capital_loc[0] + np.random.randint(-1, 2)
+                c = agent_nation_capital_loc[1] + np.random.randint(-1, 2)
                 n_tries += 1
                 if n_tries > 200:
                     raise TimeoutError
