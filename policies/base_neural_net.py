@@ -64,6 +64,8 @@ class BaseNeuralNet(nn.Module):
         return self.dnn(h)
 
     def _update_temporal_model(self, h, prev_hc):
+        if h.shape[0] != prev_hc[0].shape[1]:
+            prev_hc = tuple(phc.repeat(1, h.shape[0], 1) for phc in prev_hc)
         _, hc = self.temporal_model(h.unsqueeze(0), prev_hc)
         return hc
 

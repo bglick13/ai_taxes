@@ -197,6 +197,7 @@ class MalthusianUniform(BaseEnvironment):
         assert self.energy_warmup_constant >= 0
         self._auto_warmup_integrator = 0
 
+        # TODO: Make these per nation so each nation has different social welfare function/weights
         # Which social welfare function to use
         self.planner_reward_type = str(planner_reward_type).lower()
 
@@ -414,7 +415,7 @@ class MalthusianUniform(BaseEnvironment):
         }
 
         # Place the agents randomly in the world
-        # TODO: Assign each agent a nation to start
+        # TODO: Assign each agent a nation to start - this happens in citizenship component, but we may be able to do it more intelligently here?
         for agent in self.world.get_random_order_agents():
             r = np.random.randint(0, self.world_size[0])
             c = np.random.randint(0, self.world_size[1])

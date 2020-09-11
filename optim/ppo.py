@@ -42,7 +42,6 @@ class Memory(Dataset):
         return len(self.memories)
 
     def add_trace(self, states, actions, old_logprobs, rewards, advantages, hcs):
-        # TODO: Pickle and unpickle to solve some memory issues
         [self.memories.append(pickle.dumps((states[i].world_map, states[i].flat_inputs, actions[i], old_logprobs[i], rewards[i], advantages[i], hcs[i]))) for i in range(len(states))]
         # self.states += states
         # self.actions += actions
@@ -70,46 +69,65 @@ class Memory(Dataset):
         # del self.hcs[:]
 
 
-def rollout(env_config, key, constructor, state_dict, n_rollouts, num_steps, _eval=False):
+def rollout(env_config, keys, train_key, constructors, state_dicts, n_rollouts, num_steps, _eval=False):
+    """
+
+    :param env_config:
+    :param keys: All the keys used in PPO (agents + planner)
+    :param train_key: The key we want to store memories for
+    :param constructors: dict mapping [key, model_constructor_function)
+    :param state_dicts: dict mapping [key, state_dict]
+    :param n_rollouts:
+    :param num_steps:
+    :param _eval:
+    :return:
+    """
     env = foundation.make_env_instance(**env_config)
     obs = env.reset()
     t = range(n_rollouts)
     memory = Memory()
-    model = constructor(device='cpu')
-    model.build_models(ObservationBatch(obs, key))
-    model.load_state_dict(state_dict, strict=False)
+    models = dict((key, constructors[key](device='cpu')) for key in keys)
+    for key, model in models.items():
+        model.build_models(ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True))
+        model.load_state_dict(state_dicts[key], strict=False)
     for rollout in t:
         obs = env.reset(force_dense_logging=_eval)
         states, actions, logprobs, rewards, values, done, hcs = [], [], [], [], [], [], []
-        hc = (zeros(1, len(key), model.lstm_size, device='cpu'),
-              zeros(1, len(key), model.lstm_size, device='cpu'))
+        model_hcs = dict((key, (zeros(1, len(key), models[key].lstm_size, device='cpu'),
+                          zeros(1, len(key), models[key].lstm_size, device='cpu'))) for key in keys)
         for step in range(num_steps):
-            # TODO: Fix the use of key here - I think we just need it to track what memories we need to store
-            obs_batch = ObservationBatch(obs, key)
-            hcs.append(hc)
+            obs_batches = dict((key, ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True)) for key in keys)
+            hcs.append(model_hcs[train_key])
+            action_dict = dict()
+            for key in keys:
+                dist, value, hc = models[key](obs_batches[key], model_hcs[key], det=False)
+                hc = (hc[0].detach(), hc[1].detach())
+                model_hcs[key] = hc
+                a = dist.sample().detach()
+                if key == train_key:
+                    actions.append(a.detach())
+                    logprob = dist.log_prob(a).detach()
+                    logprobs.append(logprob)
+                    value = value.squeeze()
+                    values.append(value)
+                if 'p' in key:
+                    n_nations = len(obs_batches[key].order)
+                    n_actions = a.shape[1] // n_nations
+                    p_array = np.concatenate([_a.detach().cpu().numpy()[i * n_actions: (i + 1) * n_actions] for i, _a in enumerate(a)])
+                    action_dict.update(dict(p=p_array))
+                else:
+                    action_dict.update(dict((i, _a.detach().cpu().numpy()) for i, _a in zip(obs_batches[key].order, a)))
 
-            dist, value, hc = model(obs_batch, hc, det=False)
-            a = dist.sample().detach()
-            action_dict = dict((i, a.detach().cpu().numpy()) for i, a in zip(obs_batch.order, a))
-            # Take no-ops for the planner for now
-            action_dict['p'] = []
-            for ad_k, ad_v in env.all_agents[-1].action_dim.items():
-                action_dict['p'].append(0)
-            actions.append(a.detach())
-            logprob = dist.log_prob(a).detach()
-            logprobs.append(logprob)
-            hc = (hc[0].detach(), hc[1].detach())
-            value = value.squeeze()
             next_obs, rew, is_done, info = env.step(action_dict)
-            states.append(obs_batch)
-            rewards.append(np.array([rew[k] for k in key]))
-            values.append(value)
+            states.append(obs_batches[train_key])
+            rewards.append(np.array([rew[k] for k in train_key]))
+
             done.append(is_done['__all__'])
 
             obs = next_obs
 
-        obs_batch = ObservationBatch(obs, key)
-        _, next_value, hc = model(obs_batch, hc)
+        obs_batch = ObservationBatch(obs, train_key, flatten_action_masks=False if 'p' in train_key else True)
+        _, next_value, hc = models[train_key](obs_batch, model_hcs[train_key])
         next_value = next_value.detach().cpu().numpy()
         values = stack(values).detach().cpu().numpy()
         discounted_rewards = compute_gae(next_value, rewards, done, values)
@@ -152,7 +170,7 @@ class PPO:
         obs = env.reset()
         for key, value in models.items():
             self.models[key] = value(device=self.device)
-            self.models[key].build_models(ObservationBatch(obs, key))
+            self.models[key].build_models(ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True))
             self.memory[key] = Memory()
         self.lr = lr
         self.gamma = gamma
@@ -220,11 +238,12 @@ class PPO:
             os.makedirs(f'weights/temp')
         for it in t:
             for key, spec in key_order:
-                constructor = self.model_key_to_constructor[key]
-                state_dict = self.models[key].to('cpu').state_dict()
+                # constructor = self.model_key_to_constructor[key]
+                state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
                 rollouts_per_jobs = spec.get('rollouts_per_job', 1)
 
-                rollout(self.env_config, key, constructor, state_dict, n_rollouts=1, num_steps=1000)
+                rollout(self.env_config, np.array(key_order)[:, 0], key, self.model_key_to_constructor, state_dicts,
+                        n_rollouts=1, num_steps=1000)
 
                 with mp.Pool(n_jobs) as pool:
                     result = pool.starmap(rollout, [(self.env_config, key, constructor, state_dict, rollouts_per_jobs,
