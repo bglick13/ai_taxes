@@ -1065,7 +1065,6 @@ class MalthusianQuadrant(MalthusianUniform):
             for i in range(len(nations)):
                 zone = self.zones[i]
                 self.world.capital_locations[nations[i]] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
-            print(self.world.capital_locations)
 
 
 
