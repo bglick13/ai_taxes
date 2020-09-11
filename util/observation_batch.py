@@ -24,14 +24,16 @@ class ObservationBatch:
                 columns = self.obs.columns.values
                 nation_columns = [c for c in columns if regex_search.match(c)]
                 nation_names = [c.split('-')[1] for c in nation_columns]
+                # Add each nation as a row in the dataframe, similar to mobile agent obs structure
                 self.obs = self.obs.reindex(['p'] + nation_names, method='pad')
+                # Copy the planner obs to the nation obs
                 for nn in nation_names:
                     self.obs.loc[nn, :] = self.obs.loc['p', :]
-                # TODO: Fix this. Trying to get the obs to actually be a dict by nation, for some reason the nationb data column ends up as nans
-                tmp = self.obs.loc['p', nation_columns].to_frame()
+                # Combine each nation column into a single column
+                tmp = self.obs.loc['p', nation_columns]
                 tmp.index = nation_names
                 self.obs = self.obs.drop('p', 0)
-                self.obs.loc[nation_names, 'MalthusianPeriodicBracketTax-nation_data'] = tmp
+                self.obs['MalthusianPeriodicBracketTax-nation_data'] = tmp
                 self.obs = self.obs.drop(nation_columns, 1)
             self.order = self.obs.index.values
             # self.obs = self.obs.to_dict()
@@ -41,6 +43,12 @@ class ObservationBatch:
                 action_masks = []
                 for am in self.obs['action_mask'].values:
                     action_masks.append(np.concatenate(list(am.values())))
+                self.action_mask = np.array(action_masks)
+            else:
+                action_masks = []
+                for nation_am in self.obs['action_mask'].values:
+                    am = np.array(list(nation_am.values()))
+                    action_masks.append(am)
                 self.action_mask = np.array(action_masks)
             self.world_map = np.array([a for a in self.obs['world-map'].values])
             columns = []

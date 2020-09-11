@@ -238,7 +238,6 @@ class MalthusianPeriodicBracketTax(BaseComponent):
             self._annealing_slope = None
 
         if self.tax_model == "model_wrapper" and not self.disable_taxes:
-            # TODO: Make sure this doesn't need to change - Pretty sure it doesn't
             planner_action_tuples = self.get_n_actions("BasicPlanner")
             self._planner_tax_val_dict = {
                 k: self.disc_rates for k, v in planner_action_tuples
@@ -365,7 +364,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
 
     def enact_taxes(self):
         """Calculate period income & tax burden. Collect taxes and redistribute."""
-        # TODO: enact taxes
+        self.last_nationality = [a.state['nation'] for a in self.world.agents]
         net_tax_revenue = dict((n, 0) for n in self.nations)
         tax_dict = dict(
             schedule=self.curr_marginal_rates,
@@ -424,6 +423,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         self._last_income_obs_sorted = self._last_income_obs[
             np.argsort(self._last_income_obs)
         ]
+        self._last_income_nationality_obs_sorted = np.array(self.last_nationality)[np.argsort(self._last_income_obs)]
 
     # Required methods for implementing components
     # --------------------------------------------
@@ -495,7 +495,6 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         also sees, for each agent, their marginal tax rate and reported income from
         the previous tax period.
         """
-        # TODO: generate_observations -  I think this has been updated to work
         is_tax_day = float(self.tax_cycle_pos >= self.period)
         is_first_day = float(self.tax_cycle_pos == 1)
         tax_phase = self.tax_cycle_pos / self.period
@@ -561,7 +560,6 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         When self.tax_cycle_pos==1, tax actions are masked in order to enforce any
         tax annealing.
         """
-        # TODO: Update to make sure nations can't change other nations tax plans
         if (
             completions != self._last_completions
             and self.tax_annealing_schedule is not None
@@ -641,7 +639,6 @@ class MalthusianPeriodicBracketTax(BaseComponent):
 
         Reset trackers.
         """
-        # TODO: Update this a bit
         self.curr_bracket_tax_rates = dict((n, np.zeros_like(self.bracket_cutoffs)) for n in self.world.planner.state['nations'])
         self.curr_rate_indices = dict((n, [0 for _ in range(self.n_brackets)]) for n in self.world.planner.state['nations'])
 
@@ -679,7 +676,6 @@ class MalthusianPeriodicBracketTax(BaseComponent):
 
         Return metrics related to bracket rates, bracket occupancy, and tax collection.
         """
-        # TODO: Make this per nation
         out = dict()
 
         for nation in self.nations:

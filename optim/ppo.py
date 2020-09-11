@@ -112,7 +112,10 @@ def rollout(env_config, keys, train_key, constructors, state_dicts, n_rollouts, 
                     value = value.squeeze()
                     values.append(value)
                 if 'p' in key:
-                    action_dict.update(dict((i, _a.detach().cpu().numpy()) for i, _a in zip(obs_batches[key].order, a.unsqueeze(0))))
+                    n_nations = len(obs_batches[key].order)
+                    n_actions = a.shape[1] // n_nations
+                    p_array = np.concatenate([_a.detach().cpu().numpy()[i * n_actions: (i + 1) * n_actions] for i, _a in enumerate(a)])
+                    action_dict.update(dict(p=p_array))
                 else:
                     action_dict.update(dict((i, _a.detach().cpu().numpy()) for i, _a in zip(obs_batches[key].order, a)))
 

@@ -196,6 +196,7 @@ class MalthusianUniform(BaseEnvironment):
         assert self.energy_warmup_constant >= 0
         self._auto_warmup_integrator = 0
 
+        # TODO: Make these per nation so each nation has different social welfare function/weights
         # Which social welfare function to use
         self.planner_reward_type = str(planner_reward_type).lower()
 
