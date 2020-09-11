@@ -42,7 +42,6 @@ class Memory(Dataset):
         return len(self.memories)
 
     def add_trace(self, states, actions, old_logprobs, rewards, advantages, hcs):
-        # TODO: Pickle and unpickle to solve some memory issues
         [self.memories.append(pickle.dumps((states[i].world_map, states[i].flat_inputs, actions[i], old_logprobs[i], rewards[i], advantages[i], hcs[i]))) for i in range(len(states))]
         # self.states += states
         # self.actions += actions

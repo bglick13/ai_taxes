@@ -414,7 +414,7 @@ class MalthusianUniform(BaseEnvironment):
         }
 
         # Place the agents randomly in the world
-        # TODO: Assign each agent a nation to start
+        # TODO: Assign each agent a nation to start - this happens in citizenship component, but we may be able to do it more intelligently here?
         for agent in self.world.get_random_order_agents():
             r = np.random.randint(0, self.world_size[0])
             c = np.random.randint(0, self.world_size[1])
