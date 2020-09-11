@@ -19,6 +19,20 @@ class ObservationBatch:
 
             self.batch_size = 1
             self.obs = pd.DataFrame.from_dict(obs, orient='index').loc[keys, :]  # Basically just transpose the dict
+            if 'p' in keys:
+                regex_search = re.compile('MalthusianPeriodicBracketTax-\w*land')
+                columns = self.obs.columns.values
+                nation_columns = [c for c in columns if regex_search.match(c)]
+                nation_names = [c.split('-')[1] for c in nation_columns]
+                self.obs = self.obs.reindex(['p'] + nation_names, method='pad')
+                for nn in nation_names:
+                    self.obs.loc[nn, :] = self.obs.loc['p', :]
+                # TODO: Fix this. Trying to get the obs to actually be a dict by nation, for some reason the nationb data column ends up as nans
+                tmp = self.obs.loc['p', nation_columns].to_frame()
+                tmp.index = nation_names
+                self.obs = self.obs.drop('p', 0)
+                self.obs.loc[nation_names, 'MalthusianPeriodicBracketTax-nation_data'] = tmp
+                self.obs = self.obs.drop(nation_columns, 1)
             self.order = self.obs.index.values
             # self.obs = self.obs.to_dict()
             for key, value in self.obs.to_dict().items():

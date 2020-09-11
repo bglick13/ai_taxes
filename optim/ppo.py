@@ -97,7 +97,6 @@ def rollout(env_config, keys, train_key, constructors, state_dicts, n_rollouts, 
         model_hcs = dict((key, (zeros(1, len(key), models[key].lstm_size, device='cpu'),
                           zeros(1, len(key), models[key].lstm_size, device='cpu'))) for key in keys)
         for step in range(num_steps):
-            # TODO: Fix the use of key here - I think we just need it to track what memories we need to store
             obs_batches = dict((key, ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True)) for key in keys)
             hcs.append(model_hcs[train_key])
             action_dict = dict()

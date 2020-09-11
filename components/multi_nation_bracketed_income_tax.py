@@ -504,24 +504,25 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         _curr_rates_obs = []
         for n in self.world.planner.state['nations']:
             _curr_rates_obs += self._curr_rates_obs[n].tolist()
-
-        obs[self.world.planner.idx] = dict(
-            is_tax_day=is_tax_day,
-            is_first_day=is_first_day,
-            tax_phase=tax_phase,
-            last_incomes=self._last_income_obs_sorted,  # Planners see the incomes of each agent, regardless of nation
-            last_nationalities=self._last_income_nationality_obs_sorted,  # Planners see nationality associated with each income too
-            curr_rates=_curr_rates_obs,  # Planners see tax rates for each nation
-        )
+        obs[self.world.planner.idx] = dict()
+        for nation in self.nations:
+            obs[self.world.planner.idx][nation] = dict(
+                is_tax_day=is_tax_day,
+                is_first_day=is_first_day,
+                tax_phase=tax_phase,
+                last_incomes=self._last_income_obs_sorted,  # Planners see the incomes of each agent, regardless of nation
+                last_nationalities=self._last_income_nationality_obs_sorted,  # Planners see nationality associated with each income too
+                curr_rates=_curr_rates_obs,  # Planners see tax rates for each nation
+            )
         # for nation in self.world.planner.state['nations']:
         #     obs['p'][nation] = dict()
         for nation in self.world.planner.state['nations']:
             nation_idx = self.world.planner.state['nation_to_idx'][nation]
-            obs['p'][nation] = dict(
+            obs['p'][nation].update(dict(
                 # Add a nation specific observation so they know their own current rates
-                curr_rates=_curr_rates_obs[nation_idx * self.n_disc_rates: (nation_idx + 1) * self.n_disc_rates],
-                last_incomes=self._last_income_obs_sorted[self._last_income_nationality_obs_sorted == nation_idx]
-            )
+                self_curr_rates=_curr_rates_obs[nation_idx * self.n_brackets: (nation_idx + 1) * self.n_brackets],
+                self_last_incomes=self._last_income_obs_sorted[self._last_income_nationality_obs_sorted == nation_idx]
+            ))
 
         for agent in self.world.agents:
             i = agent.idx
@@ -560,6 +561,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         When self.tax_cycle_pos==1, tax actions are masked in order to enforce any
         tax annealing.
         """
+        # TODO: Update to make sure nations can't change other nations tax plans
         if (
             completions != self._last_completions
             and self.tax_annealing_schedule is not None
