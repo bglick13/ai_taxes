@@ -2,6 +2,7 @@ from copy import deepcopy
 
 import numpy as np
 from scipy import signal
+from IPython import embed
 
 from ai_economist.foundation.base.base_env import BaseEnvironment, scenario_registry
 
@@ -956,6 +957,12 @@ class MalthusianQuadrant(MalthusianUniform):
         super().__init__(*args, **kwargs)
         width = self.world_size[1]
         height = self.world_size[0]
+        self.zones = [
+            ((0,0), (width/2, 0), (0, height/2), (width/2, height/2)),
+            ((width/2 + 1,0), (width, 0), (width/2 + 1, height/2), (width, height/2)),
+            ((0,height/2+1), (width/2, height/2+1), (0, height), (width/2, height)),
+            ((width/2+1,height/2+1), (width, height/2+1), (width/2+1,height), (width, height))
+        ]
 
         o0 = 0.2
         o1 = 0.35
@@ -972,6 +979,16 @@ class MalthusianQuadrant(MalthusianUniform):
             v = v * (1 - self._water)
             v = v / np.sum(v)
             self.source_prob_maps[k] = v
+        # embed()
+        # Set capital locations for each nation.
+        # self.capital_locations = dict()
+        # nations = self.world.planner.state['nations']
+        # try:
+        #     assert 1 <= len(nations) <= 4
+        # except AssertionError:
+        #     print("Too many nations...")
+        #     raise 
+
 
     def make_source_prob_maps(self):
         """
@@ -1020,8 +1037,6 @@ class MalthusianQuadrant(MalthusianUniform):
         width = self.world_size[1]
         height = self.world_size[0]
 
-        # TODO: Place agents in each quadrant based on their nationality and that nation's "capitol" location
-
         # Remove anything at the water line
         for entity, state in self.world.maps.items():
             if isinstance(state, dict):
@@ -1040,3 +1055,56 @@ class MalthusianQuadrant(MalthusianUniform):
 
         # Place water
         self.world.maps.set("Water", self._water)
+
+        # Set the capital location for each nation
+        self.world.capital_locations = dict()
+        # TODO: Is this the right place to be putting this?
+        if 'nations' in self.world.planner.state.keys():
+            nations = self.world.planner.state['nations']
+            for i in range(len(nations)):
+                zone = self.zones[i]
+                self.world.capital_locations[nations[i]] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
+            print(self.world.capital_locations)
+
+
+
+    def reset_agent_state(self):
+        """
+        Reset the starting layout of the agents themselves (i.e. inventory, locations, etc.).
+
+        Here, empty inventories, give mobile agents any starting coin, and
+        place them in each quadrant based on their nationality and the nation's "capital" location.
+        """
+        self.world.clear_agent_locs()
+
+        for agent in self.world.agents:
+            # Clear everything to start with
+            agent.state["inventory"] = {k: 0 for k in agent.inventory.keys()}
+            agent.state["escrow"] = {k: 0 for k in agent.inventory.keys()}
+            agent.state["endogenous"] = {k: 0 for k in agent.endogenous.keys()}
+            # Add starting coin
+            agent.state["inventory"]["Coin"] = float(self.starting_agent_coin)
+
+        # Clear everything for the planner
+        self.world.planner.state["inventory"] = {
+            k: 0 for k in self.world.planner.inventory.keys()
+        }
+        self.world.planner.state["escrow"] = {
+            k: 0 for k in self.world.planner.escrow.keys()
+        }
+
+        for agent in self.world.get_random_order_agents():
+            agent_nation_capital_loc = self.world.capital_locations[agent.state['nation']]
+            r = np.random.randint(0, self.world_size[0] / len(self.capital_locations))
+            c = np.random.randint(0, self.world_size[1] / len(self.capital_locations))
+            n_tries = 0
+
+            # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
+            #       This could happen if width != height. 
+            while not self.world.can_agent_occupy(r, c, agent):
+                r = np.random.randint(0, self.world_size[0] / len(self.capital_locations))
+                c = np.random.randint(0, self.world_size[1] / len(self.capital_locations))
+                n_tries += 1
+                if n_tries > 200:
+                    raise TimeoutError
+            self.world.set_agent_loc(agent, r, c)

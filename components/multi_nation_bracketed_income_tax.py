@@ -679,7 +679,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         """
         # TODO: Make this per nation
         out = dict()
-
+        
         for nation in self.nations:
             out[nation] = dict()
 
@@ -699,8 +699,12 @@ class MalthusianPeriodicBracketTax(BaseComponent):
                 agent_coin_endows = np.array(
                     [agent.total_endowment("Coin") for agent in self.world.agents if agent.state['nation'] == nation]
                 )
-                idx_poor = np.argmin(agent_coin_endows)
-                idx_rich = np.argmax(agent_coin_endows)
+                if len(agent_coin_endows) == 0:
+                    idx_poor = 0
+                    idx_rich = 0
+                else:
+                    idx_poor = np.argmin(agent_coin_endows)
+                    idx_rich = np.argmax(agent_coin_endows)
 
                 tax_days = self.taxes[(self.period - 1) :: self.period]
                 for i, tag in zip([idx_poor, idx_rich], ["poorest", "richest"]):

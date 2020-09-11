@@ -3,10 +3,10 @@ from ai_economist.foundation.entities.landmarks import landmark_registry, Landma
 
 
 @landmark_registry.add
-class Capitol(Landmark):
-    """Capitol Landmark"""
+class Capital(Landmark):
+    """Capital Landmark"""
     # TODO: This
-    name = "Capitol"
+    name = "Capital"
     color = np.array([220, 20, 220]) / 255.0
     ownable = False
     solid = False

@@ -1,1 +1,1 @@
-from entities.capitol import *
+from entities.capital import *

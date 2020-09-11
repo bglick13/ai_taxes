@@ -63,7 +63,23 @@ class OpenBorderCitizenship(BaseComponent):
             elif 1 <= action <= self.n_nations + 1:
                 agent.state['nation'] = self.world.planner.state['idx_to_nation'][action - 1]
                 agent.state['nation_idx'] = action - 1
-                # TODO: Implement logic to move agent to closest occupy-able location to nation's capitol
+                
+                nation = agent.state['nation']
+                nation_capital_loc = self.world.capital_locations[nation]
+                r = np.random.randint(0, self.world_size[0] / len(self.capital_locations))
+                c = np.random.randint(0, self.world_size[1] / len(self.capital_locations))
+                n_tries = 0
+
+                # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
+                #       This could happen if width != height. 
+                while not self.world.can_agent_occupy(r, c, agent):
+                    r = np.random.randint(0, self.world_size[0] / len(self.capital_locations))
+                    c = np.random.randint(0, self.world_size[1] / len(self.capital_locations))
+                    n_tries += 1
+                    if n_tries > 200:
+                        raise TimeoutError
+                self.world.set_agent_loc(agent, r, c)
+
                 if self.relocate_on_immigrate:
                     pass
 
