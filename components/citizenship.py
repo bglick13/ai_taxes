@@ -1,4 +1,5 @@
 import numpy as np
+from IPython import embed
 
 from ai_economist.foundation.base.base_component import (
     BaseComponent,
@@ -25,6 +26,7 @@ class OpenBorderCitizenship(BaseComponent):
         self.idx_to_nations = dict((i, n) for i, n in enumerate(self.nations))
         self.relocate_on_immigrate = relocate_on_immigrate
         self.citizenship_count = dict((n, 0) for n in self.nations)
+        # embed()
 
     def get_n_actions(self, agent_cls_name):
         if agent_cls_name == 'BasicMobileAgent':
@@ -66,15 +68,15 @@ class OpenBorderCitizenship(BaseComponent):
                 
                 nation = agent.state['nation']
                 nation_capital_loc = self.world.capital_locations[nation]
-                r = np.random.randint(0, self.world_size[0] / len(self.capital_locations))
-                c = np.random.randint(0, self.world_size[1] / len(self.capital_locations))
+                r = np.random.randint(0, self.world.maps.size[0] / len(self.world.capital_locations))
+                c = np.random.randint(0, self.world.maps.size[1] / len(self.world.capital_locations))
                 n_tries = 0
 
                 # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
                 #       This could happen if width != height. 
                 while not self.world.can_agent_occupy(r, c, agent):
-                    r = np.random.randint(0, self.world_size[0] / len(self.capital_locations))
-                    c = np.random.randint(0, self.world_size[1] / len(self.capital_locations))
+                    r = np.random.randint(0, self.world.maps.size[0] / len(self.world.capital_locations))
+                    c = np.random.randint(0, self.world.maps.size[1] / len(self.world.capital_locations))
                     n_tries += 1
                     if n_tries > 200:
                         raise TimeoutError
