@@ -1064,14 +1064,9 @@ class MalthusianQuadrant(MalthusianUniform):
         if 'nations' in self.world.planner.state.keys():
             nations = self.world.planner.state['nations']
             for i in range(len(nations)):
-<<<<<<< HEAD
                 zone = self.world.zones[i]
                 self.world.capital_locations[nations[i]] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
                 self.world.nation_zones[nations[i]] = zone
-=======
-                zone = self.zones[i]
-                self.world.capital_locations[nations[i]] = (int((zone[0][0] + zone[1][0])/2),int((zone[0][1] + zone[2][1])/2))
->>>>>>> 6138b2552c9b6f30cc9300cb3dc25599af553a3f
 
 
     def reset_agent_state(self):
