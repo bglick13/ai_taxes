@@ -15,15 +15,15 @@ class OpenBorderCitizenship(BaseComponent):
     required_entities = []
     agent_subclasses = ["BasicMobileAgent"]
 
-    def __init__(self, *args, nations=None, relocate_on_immigrate=False, **kwargs):
+    def __init__(self, *args, nations=None, nations_to_idx=None, idx_to_nations=None, relocate_on_immigrate=False, **kwargs):
         super().__init__(*args, **kwargs)
         if nations is None:
             self.nations = ['foo_land', 'bar_land']
         else:
             self.nations = nations
         self.n_nations = len(self.nations)
-        self.nations_to_idx = dict((n, i) for i, n in enumerate(self.nations))
-        self.idx_to_nations = dict((i, n) for i, n in enumerate(self.nations))
+        self.nations_to_idx = nations_to_idx
+        self.idx_to_nations = idx_to_nations
         self.relocate_on_immigrate = relocate_on_immigrate
         self.citizenship_count = dict((n, 0) for n in self.nations)
         # embed()
@@ -71,13 +71,17 @@ class OpenBorderCitizenship(BaseComponent):
                 c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
                 n_tries = 0
 
-                # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
-                #       This could happen if width != height. 
+                # TODO: Make sure that an agent cannot spawn in a different nation's zone(s).
+                #       This could happen if width != height.
+                # TODO: Change to picking random spot in region to avoid timeout error
+                tmp = []
                 while not self.world.can_agent_occupy(r, c, agent):
                     r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
                     c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
                     n_tries += 1
+                    tmp.append((r, c))
                     if n_tries > 200:
+                        print(tmp)
                         raise TimeoutError
                 self.world.set_agent_loc(agent, r, c)
 

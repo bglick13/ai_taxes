@@ -1,5 +1,7 @@
 experiment_name = 'malthusian_open_borders'
 nations = ['foo_land', 'bar_land']
+nations_to_idx = dict((n, i) for i, n in enumerate(nations))
+idx_to_nations = dict((i, n) for i, n in enumerate(nations))
 env_config = {
         # ===== SCENARIO CLASS =====
         # Which Scenario class to use: the class's name in the Scenario Registry (foundation.scenarios).
@@ -18,8 +20,8 @@ env_config = {
             ('ContinuousDoubleAuction', {'max_num_orders': 5}),
             # (3) Movement and resource collection
             ('Gather', {}),
-            ("OpenBorderCitizenship", {'nations': nations}),
-            ('MalthusianPeriodicBracketTax', {'nations': nations})
+            ("OpenBorderCitizenship", {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations}),
+            ('MalthusianPeriodicBracketTax', {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations})
         ],
 
         # ===== SCENARIO CLASS ARGUMENTS =====

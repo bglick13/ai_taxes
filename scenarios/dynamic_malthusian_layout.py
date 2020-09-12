@@ -1064,9 +1064,14 @@ class MalthusianQuadrant(MalthusianUniform):
         if 'nations' in self.world.planner.state.keys():
             nations = self.world.planner.state['nations']
             for i in range(len(nations)):
+<<<<<<< HEAD
                 zone = self.world.zones[i]
                 self.world.capital_locations[nations[i]] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
                 self.world.nation_zones[nations[i]] = zone
+=======
+                zone = self.zones[i]
+                self.world.capital_locations[nations[i]] = (int((zone[0][0] + zone[1][0])/2),int((zone[0][1] + zone[2][1])/2))
+>>>>>>> 6138b2552c9b6f30cc9300cb3dc25599af553a3f
 
 
     def reset_agent_state(self):
@@ -1100,7 +1105,7 @@ class MalthusianQuadrant(MalthusianUniform):
             c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
             n_tries = 0
 
-            # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
+            # TODO: Make sure that an agent cannot spawn in a different nation's zone(s).
             #       This could happen if width != height. 
             while not self.world.can_agent_occupy(r, c, agent):
                 r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)

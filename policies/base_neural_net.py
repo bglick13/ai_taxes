@@ -56,7 +56,10 @@ class BaseNeuralNet(nn.Module):
     def _concat_state_space(self, h):
         local_map = h.reshape(h.shape[0], -1)
         other_obs = self.obs.flat_inputs
-        other_obs = torch.FloatTensor(other_obs).to(self.device)
+        try:
+            other_obs = torch.FloatTensor(other_obs).to(self.device)
+        except TypeError:
+            print(other_obs)
         h = torch.cat((local_map, other_obs), 1).to(self.device)
         return h
 
