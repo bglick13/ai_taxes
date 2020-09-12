@@ -958,7 +958,7 @@ class MalthusianQuadrant(MalthusianUniform):
         super().__init__(*args, **kwargs)
         width = self.world_size[1]
         height = self.world_size[0]
-        self.zones = np.array([
+        self.world.zones = np.array([
             ((0,0), (width/2, 0), (0, height/2), (width/2, height/2)),
             ((width/2 + 1,0), (width, 0), (width/2 + 1, height/2), (width, height/2)),
             ((0,height/2+1), (width/2, height/2+1), (0, height), (width/2, height)),
@@ -1059,12 +1059,14 @@ class MalthusianQuadrant(MalthusianUniform):
 
         # Set the capital location for each nation
         self.world.capital_locations = dict()
+        self.world.nation_zones = dict()
         # TODO: Is this the right place to be putting this?
         if 'nations' in self.world.planner.state.keys():
             nations = self.world.planner.state['nations']
             for i in range(len(nations)):
-                zone = self.zones[i]
+                zone = self.world.zones[i]
                 self.world.capital_locations[nations[i]] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
+                self.world.nation_zones[nations[i]] = zone
 
 
     def reset_agent_state(self):
@@ -1093,17 +1095,16 @@ class MalthusianQuadrant(MalthusianUniform):
         }
 
         for agent in self.world.get_random_order_agents():
-            agent_nation_capital_loc = self.world.capital_locations[agent.state['nation']]
-            r = agent_nation_capital_loc[0] + np.random.randint(0, 2)
-            c = agent_nation_capital_loc[1] + np.random.randint(0, 2)
-            
+            agent_nation_zone = self.world.nation_zones[agent.state['nation']]
+            r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
+            c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
             n_tries = 0
 
             # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
             #       This could happen if width != height. 
             while not self.world.can_agent_occupy(r, c, agent):
-                r = agent_nation_capital_loc[0] + np.random.randint(0, 2)
-                c = agent_nation_capital_loc[1] + np.random.randint(0, 2)
+                r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
+                c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
                 n_tries += 1
                 if n_tries > 200:
                     raise TimeoutError

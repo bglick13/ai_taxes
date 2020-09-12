@@ -66,17 +66,16 @@ class OpenBorderCitizenship(BaseComponent):
                 agent.state['nation'] = self.world.planner.state['idx_to_nation'][action - 1]
                 agent.state['nation_idx'] = action - 1
                 
-                nation = agent.state['nation']
-                nation_capital_loc = self.world.capital_locations[nation]
-                r = nation_capital_loc[0] + np.random.randint(0, 2)
-                c = nation_capital_loc[1] + np.random.randint(0, 2)
+                agent_nation_zone = self.world.nation_zones[agent.state['nation']]
+                r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
+                c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
                 n_tries = 0
 
                 # TODO: Make sure that an agent cannot spawn in a differen't nation's zone(s).
                 #       This could happen if width != height. 
                 while not self.world.can_agent_occupy(r, c, agent):
-                    r = nation_capital_loc[0] + np.random.randint(0, 2)
-                    c = nation_capital_loc[1] + np.random.randint(0, 2)
+                    r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
+                    c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
                     n_tries += 1
                     if n_tries > 200:
                         raise TimeoutError
