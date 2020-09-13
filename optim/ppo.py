@@ -242,8 +242,8 @@ class PPO:
                 state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
                 rollouts_per_jobs = spec.get('rollouts_per_job', 1)
 
-                rollout(self.env_config, np.array(key_order)[:, 0], key, self.model_key_to_constructor, state_dicts,
-                        n_rollouts=1, num_steps=1000)
+                # rollout(self.env_config, np.array(key_order)[:, 0], key, self.model_key_to_constructor, state_dicts,
+                #         n_rollouts=1, num_steps=1000)
 
                 with mp.Pool(n_jobs) as pool:
                     result = pool.starmap(rollout, [(self.env_config, np.array(key_order)[:, 0], key, self.model_key_to_constructor, state_dicts, rollouts_per_jobs,

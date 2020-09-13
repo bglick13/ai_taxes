@@ -26,6 +26,7 @@ class OpenBorderCitizenship(BaseComponent):
         self.idx_to_nations = idx_to_nations
         self.relocate_on_immigrate = relocate_on_immigrate
         self.citizenship_count = dict((n, 0) for n in self.nations)
+        self.immigrations = []
         # embed()
 
     def get_n_actions(self, agent_cls_name):
@@ -48,6 +49,7 @@ class OpenBorderCitizenship(BaseComponent):
     def component_step(self):
         world = self.world
         self.citizenship_count = dict((n, 0) for n in self.nations)
+        immigrations = []
         # Apply any building actions taken by the mobile agents
         for agent in world.get_random_order_agents():
 
@@ -60,10 +62,15 @@ class OpenBorderCitizenship(BaseComponent):
             # NO-OP!
             if action == 0:
                 pass
-
             # Immigrate!
             elif 1 <= action <= self.n_nations + 1:
-                agent.state['nation'] = self.world.planner.state['idx_to_nation'][action - 1]
+                immigrations.append([dict(
+                    agent_idx=agent.idx,
+                    from_nation=agent.state['nation'],
+                    to_nation=self.idx_to_nations[action - 1]
+                )])
+
+                agent.state['nation'] = self.idx_to_nations[action - 1]
                 agent.state['nation_idx'] = action - 1
                 
                 agent_nation_zone = self.world.nation_zones[agent.state['nation']]
@@ -73,7 +80,6 @@ class OpenBorderCitizenship(BaseComponent):
 
                 # TODO: Make sure that an agent cannot spawn in a different nation's zone(s).
                 #       This could happen if width != height.
-                # TODO: Change to picking random spot in region to avoid timeout error
                 tmp = []
                 while not self.world.can_agent_occupy(r, c, agent):
                     r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
@@ -85,11 +91,9 @@ class OpenBorderCitizenship(BaseComponent):
                         raise TimeoutError
                 self.world.set_agent_loc(agent, r, c)
 
-                if self.relocate_on_immigrate:
-                    pass
-
             else:
                 raise ValueError
+        self.immigrations.append(immigrations)
         for agent in world.agents:
             self.citizenship_count[agent.state['nation']] += 1
         self.world.planner.state['citizenship_count'] = self.citizenship_count
@@ -117,10 +121,30 @@ class OpenBorderCitizenship(BaseComponent):
         pass
 
     def get_dense_log(self):
-        pass
+        return self.immigrations
 
     def additional_reset_steps(self):
+        self.immigrations = []
         for agent in self.world.agents:
             n = np.random.choice(self.nations)
             agent.state['nation'] = n
             agent.state['nation_idx'] = self.nations_to_idx[n]
+
+        for agent in self.world.agents:
+            agent_nation_zone = self.world.nation_zones[agent.state['nation']]
+            r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
+            c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
+            n_tries = 0
+
+            # TODO: Make sure that an agent cannot spawn in a different nation's zone(s).
+            #       This could happen if width != height.
+            tmp = []
+            while not self.world.can_agent_occupy(r, c, agent):
+                r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
+                c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
+                n_tries += 1
+                tmp.append((r, c))
+                if n_tries > 200:
+                    print(tmp)
+                    raise TimeoutError
+            self.world.set_agent_loc(agent, r, c)

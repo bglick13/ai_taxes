@@ -23,7 +23,9 @@ env_config = {
             ("OpenBorderCitizenship", {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations}),
             ('MalthusianPeriodicBracketTax', {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations})
         ],
-
+        'nations': nations,
+        'nations_to_idx': nations_to_idx,
+        'idx_to_nations': idx_to_nations,
         # ===== SCENARIO CLASS ARGUMENTS =====
         # (optional) kwargs that are added by the Scenario class (i.e. not defined in BaseEnvironment)
         'starting_agent_coin': 10,

@@ -76,6 +76,9 @@ class MalthusianUniform(BaseEnvironment):
     def __init__(
         self,
         *base_env_args,
+        nations=None,
+        nations_to_idx=None,
+        idx_to_nations=None,
         planner_gets_spatial_info=True,
         full_observability=False,
         mobile_agent_observation_range=5,
@@ -97,11 +100,13 @@ class MalthusianUniform(BaseEnvironment):
         energy_warmup_constant=0,
         energy_warmup_method="decay",
         planner_reward_type="coin_eq_times_productivity",
-        mixing_weight_gini_vs_coin=0.0,
+        mixing_weight_gini_vs_coin=None,
         **base_env_kwargs
     ):
         super().__init__(*base_env_args, **base_env_kwargs)
-
+        self.nations = nations
+        self.nations_to_idx = nations_to_idx
+        self.idx_to_nations = idx_to_nations
         # Whether agents receive spatial information in their observation tensor
         self._planner_gets_spatial_info = bool(planner_gets_spatial_info)
 
@@ -204,8 +209,10 @@ class MalthusianUniform(BaseEnvironment):
         # How much to weight equality if using SWF=eq*prod:
         # 0 -> SWF=eq*prod
         # 1 -> SWF=prod
-        self.mixing_weight_gini_vs_coin = float(mixing_weight_gini_vs_coin)
-        assert 0 <= self.mixing_weight_gini_vs_coin <= 1.0
+        if mixing_weight_gini_vs_coin is None:
+            self.mixing_weight_gini_vs_coin = dict((n, np.random.uniform()) for n in self.nations)
+        else:
+            self.mixing_weight_gini_vs_coin = mixing_weight_gini_vs_coin
 
         # Use this to calculate marginal changes and deliver that as reward
         self.init_optimization_metric = {agent.idx: 0 for agent in self.all_agents}
@@ -257,7 +264,7 @@ class MalthusianUniform(BaseEnvironment):
                     coin_endowments=np.array(
                         [agent.total_endowment("Coin") for agent in self.world.agents if agent.state['nation'] == nation]
                     ),
-                    equality_weight=1 - self.mixing_weight_gini_vs_coin,
+                    equality_weight=1 - self.mixing_weight_gini_vs_coin[nation],
                 )
             elif self.planner_reward_type == "inv_income_weighted_coin_endowments":
                 curr_optimization_metric[
@@ -414,19 +421,19 @@ class MalthusianUniform(BaseEnvironment):
             k: 0 for k in self.world.planner.escrow.keys()
         }
 
+
         # Place the agents randomly in the world
-        # TODO: Assign each agent a nation to start - this happens in citizenship component, but we may be able to do it more intelligently here?
-        for agent in self.world.get_random_order_agents():
-            r = np.random.randint(0, self.world_size[0])
-            c = np.random.randint(0, self.world_size[1])
-            n_tries = 0
-            while not self.world.can_agent_occupy(r, c, agent):
-                r = np.random.randint(0, self.world_size[0])
-                c = np.random.randint(0, self.world_size[1])
-                n_tries += 1
-                if n_tries > 200:
-                    raise TimeoutError
-            self.world.set_agent_loc(agent, r, c)
+        # for agent in self.world.get_random_order_agents():
+        #     r = np.random.randint(0, self.world_size[0])
+        #     c = np.random.randint(0, self.world_size[1])
+        #     n_tries = 0
+        #     while not self.world.can_agent_occupy(r, c, agent):
+        #         r = np.random.randint(0, self.world_size[0])
+        #         c = np.random.randint(0, self.world_size[1])
+        #         n_tries += 1
+        #         if n_tries > 200:
+        #             raise TimeoutError
+        #     self.world.set_agent_loc(agent, r, c)
 
     def scenario_step(self):
         """
@@ -1060,14 +1067,10 @@ class MalthusianQuadrant(MalthusianUniform):
         # Set the capital location for each nation
         self.world.capital_locations = dict()
         self.world.nation_zones = dict()
-        # TODO: Is this the right place to be putting this?
-        if 'nations' in self.world.planner.state.keys():
-            nations = self.world.planner.state['nations']
-            for i in range(len(nations)):
-                zone = self.world.zones[i]
-                self.world.capital_locations[nations[i]] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
-                self.world.nation_zones[nations[i]] = zone
-
+        for i, n in enumerate(self.nations):
+            zone = self.world.zones[i]
+            self.world.capital_locations[n] = ((zone[0][0] + zone[1][0])/2,(zone[0][1] + zone[2][1])/2)
+            self.world.nation_zones[n] = zone
 
     def reset_agent_state(self):
         """
