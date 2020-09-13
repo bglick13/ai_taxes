@@ -246,7 +246,7 @@ class PPO:
                         n_rollouts=1, num_steps=1000)
 
                 with mp.Pool(n_jobs) as pool:
-                    result = pool.starmap(rollout, [(self.env_config, key, constructor, state_dict, rollouts_per_jobs,
+                    result = pool.starmap(rollout, [(self.env_config, np.array(key_order)[:, 0], key, self.model_key_to_constructor, state_dicts, rollouts_per_jobs,
                                                      spec.get('n_steps_per_rollout')) for _ in range(spec.get('n_rollouts'))])
                 self.memory[key] = join_memories(result)
 
@@ -267,7 +267,7 @@ class PPO:
         for key, spec in key_order.items():
             constructor = self.model_key_to_constructor[key]
             state_dict = self.models[key].to('cpu').state_dict()
-            _, log, skills = rollout(self.env_config, key, constructor, state_dict, n_rollouts=1, num_steps=1000, _eval=True)
+            _, log, skills = rollout(self.env_config, np.array(key_order)[:, 0], key, constructor, state_dict, n_rollouts=1, num_steps=1000, _eval=True)
             dense_logs.append(log)
             b = breakdown(log)
 
