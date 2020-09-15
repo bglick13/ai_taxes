@@ -21,6 +21,7 @@ env_config = {
             # (3) Movement and resource collection
             ('Gather', {}),
             ("OpenBorderCitizenship", {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations}),
+            # TODO: Add annealling schedule to tax planner
             ('MalthusianPeriodicBracketTax', {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations})
         ],
         'nations': nations,

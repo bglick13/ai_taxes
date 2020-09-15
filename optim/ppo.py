@@ -1,4 +1,6 @@
 # import torch
+import time
+
 from torch import stack, zeros, clamp, min, save, load
 from torch.optim import Adam
 import numpy as np
@@ -69,7 +71,7 @@ class Memory(Dataset):
         # del self.hcs[:]
 
 
-def rollout(env_config, keys, train_key, constructors, state_dicts, n_rollouts, num_steps, _eval=False):
+def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, _eval=False):
     """
 
     :param env_config:
@@ -85,55 +87,81 @@ def rollout(env_config, keys, train_key, constructors, state_dicts, n_rollouts, 
     env = foundation.make_env_instance(**env_config)
     obs = env.reset()
     t = range(n_rollouts)
-    memory = Memory()
+    memory = dict((key, Memory()) for key in keys)
     models = dict((key, constructors[key](device='cpu')) for key in keys)
     for key, model in models.items():
         model.build_models(ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True))
         model.load_state_dict(state_dicts[key], strict=False)
     for rollout in t:
         obs = env.reset(force_dense_logging=_eval)
-        states, actions, logprobs, rewards, values, done, hcs = [], [], [], [], [], [], []
-        model_hcs = dict((key, (zeros(1, len(key), models[key].lstm_size, device='cpu'),
-                          zeros(1, len(key), models[key].lstm_size, device='cpu'))) for key in keys)
+        states, actions, logprobs, rewards, values, done, hcs = (dict((key, []) for key in keys),
+                                                                 dict((key, []) for key in keys),
+                                                                 dict((key, []) for key in keys),
+                                                                 dict((key, []) for key in keys),
+                                                                 dict((key, []) for key in keys),
+                                                                 dict((key, []) for key in keys),
+                                                                 dict((key, []) for key in keys))
+        model_hcs = dict((key, (zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device='cpu'),
+                                zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device='cpu'))) for key in keys)
         for step in range(num_steps):
+            # TODO: Only sample planner actions if first timestep of period, else just update hidden state
+            # TODO: Train both models jointly as described in paper
             obs_batches = dict((key, ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True)) for key in keys)
-            hcs.append(model_hcs[train_key])
+            for key, item in model_hcs.items():
+                hcs[key].append(item)
             action_dict = dict()
             for key in keys:
                 dist, value, hc = models[key](obs_batches[key], model_hcs[key], det=False)
                 hc = (hc[0].detach(), hc[1].detach())
                 model_hcs[key] = hc
                 a = dist.sample().detach()
-                if key == train_key:
-                    actions.append(a.detach())
+                if 'p' not in key:
+                    actions[key].append(a.detach())
                     logprob = dist.log_prob(a).detach()
-                    logprobs.append(logprob)
+                    logprobs[key].append(logprob)
                     value = value.squeeze()
-                    values.append(value)
-                if 'p' in key:
-                    n_nations = len(obs_batches[key].order)
-                    n_actions = a.shape[1] // n_nations
-                    p_array = np.concatenate([_a.detach().cpu().numpy()[i * n_actions: (i + 1) * n_actions] for i, _a in enumerate(a)])
-                    action_dict.update(dict(p=p_array))
-                else:
+                    values[key].append(value)
                     action_dict.update(dict((i, _a.detach().cpu().numpy()) for i, _a in zip(obs_batches[key].order, a)))
 
-            next_obs, rew, is_done, info = env.step(action_dict)
-            states.append(obs_batches[train_key])
-            rewards.append(np.array([rew[k] for k in train_key]))
+                elif 'p' in key:
+                    if step % env.world.planner.state['period'] == 0:
+                        actions[key].append(a.detach())
+                        logprob = dist.log_prob(a).detach()
+                        logprobs[key].append(logprob)
+                        value = value.squeeze()
+                        values[key].append(value)
+                        n_nations = len(obs_batches[key].order)
+                        n_actions = a.shape[1] // n_nations
+                        p_array = np.concatenate([_a.detach().cpu().numpy()[i * n_actions: (i + 1) * n_actions] for i, _a in enumerate(a)])
+                        action_dict.update(dict(p=p_array))
+                    else:
+                        actions[key].append(actions[key][-1])
+                        logprobs[key].append(logprobs[key][-1])
+                        values[key].append(values[key][-1])
 
-            done.append(is_done['__all__'])
+            next_obs, rew, is_done, info = env.step(action_dict)
+            for key, obs in obs_batches.items():
+                states[key].append(obs)
+            for key in keys:
+                if 'p' in key:
+                    rew_dict = rew['p']
+                    rewards[key].append(np.array(list(rew_dict.values())))
+                else:
+                    rewards[key].append(np.array([rew[k] for k in key]))
+            for key in keys:
+                done[key].append(is_done['__all__'])
 
             obs = next_obs
 
-        obs_batch = ObservationBatch(obs, train_key, flatten_action_masks=False if 'p' in train_key else True)
-        _, next_value, hc = models[train_key](obs_batch, model_hcs[train_key])
-        next_value = next_value.detach().cpu().numpy()
-        values = stack(values).detach().cpu().numpy()
-        discounted_rewards = compute_gae(next_value, rewards, done, values)
-        advantage = (discounted_rewards - values).tolist()
-        discounted_rewards = discounted_rewards.tolist()
-        memory.add_trace(states, actions, logprobs, discounted_rewards, advantage, hcs)
+        obs_batches = dict((key, ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True)) for key in keys)
+        for key, obs in obs_batches.items():
+            _, next_value, hc = models[key](obs, model_hcs[key])
+            next_value = next_value.detach().cpu().numpy()
+            values_k = stack(values[key]).detach().cpu().numpy()
+            discounted_rewards = compute_gae(next_value, rewards[key], done[key], values_k)
+            advantage = (discounted_rewards - values_k).tolist()
+            discounted_rewards = discounted_rewards.tolist()
+            memory[key].add_trace(states[key], actions[key], logprobs[key], discounted_rewards, advantage, hcs[key])
     if _eval:
         return memory, env.previous_episode_dense_log, [agent.state['build_skill'] for agent in env.world.agents]
     else:
@@ -145,7 +173,10 @@ def compute_gae(next_value, rewards, masks, values, tau=0.98, gamma=0.998):
     gae = 0
     returns = []
     for step in reversed(range(len(rewards))):
-        delta = rewards[step] + (gamma * values[step + 1] * masks[step]).squeeze() - values[step]
+        try:
+            delta = rewards[step] + (gamma * values[step + 1] * masks[step]).squeeze() - values[step]
+        except TypeError:
+            print('here')
         gae = delta + gamma * tau * masks[step] * gae
         returns.insert(0, gae + values[step])
     return np.array(returns)
@@ -183,8 +214,8 @@ class PPO:
 
     def load_weights_from_file(self):
         for key, value in self.models.items():
-            weights = load(os.path.join(current_file_path, '..', 'experiments', 'free_market', 'weights', str(key)+'_final.torch'))    
-            #weights = load(os.path.join(f'weights/{key}_final.torch'))
+            # weights = load(os.path.join('weights', str(key)+'_final.torch'))
+            weights = load(os.path.join(f'weights/{key}_final.torch'))
             self.models[key].load_state_dict(weights)
 
     def update(self, key, epochs, batch_size=1, shuffle=False, num_workers=0):
@@ -200,8 +231,11 @@ class PPO:
                 # Reshape: Double check this is right
                 world_maps = world_maps.reshape(batch_size * world_maps.shape[1], world_maps.shape[2], world_maps.shape[3], world_maps.shape[4])
                 flat_inputs = flat_inputs.reshape(batch_size * flat_inputs.shape[1], flat_inputs.shape[2])
-                actions = actions.reshape(-1, 1).to(self.device)
-                old_logprobs = old_logprobs.reshape(batch_size * old_logprobs.shape[1], 1).to(self.device)
+                if 'p' in key:
+                    actions = actions.reshape(-1, actions.shape[-1]).to(self.device)
+                else:
+                    actions = actions.reshape(-1, 1).to(self.device)
+                old_logprobs = old_logprobs.flatten().unsqueeze(-1).to(self.device)
                 advantages = stack(advantages).reshape(-1, 1).to(self.device)
                 rewards = stack(rewards).reshape(-1, 1).to(self.device)
                 hs = hcs[0].squeeze()
@@ -215,7 +249,11 @@ class PPO:
                 dist, value, hc = self.models[key](obs_batch, hcs)
                 entropy = dist.entropy().mean()
                 new_log_probs = dist.log_prob(actions)
+                if 'p' in key:
+                    new_log_probs = new_log_probs.flatten().unsqueeze(-1)
                 ratio = (new_log_probs - old_logprobs).exp()
+                if 'p' in key:
+                    advantages = advantages.repeat(1, actions.shape[-1]).reshape(-1, 1)
                 surr1 = ratio * advantages
                 surr2 = clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantages
                 actor_loss = - min(surr1, surr2).mean()
@@ -232,44 +270,52 @@ class PPO:
         return losses, all_rewards
 
     def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps, experiment_name, n_jobs=1):
+        self.env_config['dense_log_frequency'] = 500
         writer = SummaryWriter()
         t = trange(n_training_steps, desc='Training Iteration', leave=True)
         if not os.path.isdir(f'weights/temp'):
             os.makedirs(f'weights/temp')
         for it in t:
-            for key, spec in key_order:
+            # for key, spec in key_order:
                 # constructor = self.model_key_to_constructor[key]
-                state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
-                rollouts_per_jobs = spec.get('rollouts_per_job', 1)
+            state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
+            rollouts_per_jobs = 1  #spec.get('rollouts_per_job', 1)
 
-                # rollout(self.env_config, np.array(key_order)[:, 0], key, self.model_key_to_constructor, state_dicts,
-                #         n_rollouts=1, num_steps=1000)
+            # rollout(self.env_config, np.array(key_order)[:, 0], self.model_key_to_constructor, state_dicts,
+            #         n_rollouts=1, num_steps=100)
+            start = time.time()
+            with mp.Pool(n_jobs) as pool:
+                result = pool.starmap(rollout, [(self.env_config, np.array(key_order)[:, 0], self.model_key_to_constructor, state_dicts, rollouts_per_jobs,
+                                                 500) for _ in range(12)])
+            print(f'rollouts took {time.time() - start}s')
+            for key in self.model_key_to_constructor.keys():
+                self.memory[key] = join_memories([r[key] for r in result])
 
-                with mp.Pool(n_jobs) as pool:
-                    result = pool.starmap(rollout, [(self.env_config, np.array(key_order)[:, 0], key, self.model_key_to_constructor, state_dicts, rollouts_per_jobs,
-                                                     spec.get('n_steps_per_rollout')) for _ in range(spec.get('n_rollouts'))])
-                self.memory[key] = join_memories(result)
-
-                losses, all_rewards = self.update(key, spec.get('epochs_per_train_step'), spec.get('batch_size'))
-                writer.add_scalar('Loss/train', np.mean(losses), it)
-                writer.add_scalar('Reward/train', stack(all_rewards).mean().detach().cpu().numpy().round(3), it)
+            for key in self.memory.keys():
+                if 'p' in key:
+                    epochs = 4
+                else:
+                    epochs = 16
+                losses, all_rewards = self.update(key, epochs, 1000)
+                writer.add_scalar(f'Loss/train_{key}', np.mean(losses), it)
+                writer.add_scalar(f'Reward/train_{key}', stack(all_rewards).mean().detach().cpu().numpy().round(3), it)
                 save(self.models[key].state_dict(), f'weights/temp/{key}_checkpoint_{it}.torch.temp')
-                t.set_description(f'Training Iteration (Average Reward: {stack(all_rewards).mean().detach().cpu().numpy().round(3)}, Average Loss: {np.mean(losses).round(3)}')
                 self.memory[key].clear_memory()
-                t.refresh()
-            if (it+1) % 10 == 0:
-                self.eval(key_order, mode='a')
+            t.refresh()
+            # if (it+1) % 10 == 0:
+            #     self.eval(key_order, mode='a')
         for key, spec in key_order:
             save(self.models[key].state_dict(), f'weights/{key}_final.torch')
 
     def eval(self, key_order: List[Tuple[Tuple, Dict]], mode='w+'):
         dense_logs = list()
-        for key, spec in key_order.items():
-            constructor = self.model_key_to_constructor[key]
-            state_dict = self.models[key].to('cpu').state_dict()
-            _, log, skills = rollout(self.env_config, np.array(key_order)[:, 0], key, constructor, state_dict, n_rollouts=1, num_steps=1000, _eval=True)
-            dense_logs.append(log)
-            b = breakdown(log)
+        state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
+
+        _, log, skills = rollout(self.env_config, np.array(list(key_order.keys())), self.model_key_to_constructor, state_dicts,
+                n_rollouts=1, num_steps=1000, _eval=True)
+
+        dense_logs.append(log)
+        b = breakdown(log)
 
         incomes = list(np.round(b[1]['Total'], 3))
         percent_income_from_build = list(np.round(b[1]['Build']/b[1]['Total'], 3))
