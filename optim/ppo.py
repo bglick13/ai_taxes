@@ -6,6 +6,7 @@ from torch.optim import Adam
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from ai_economist import foundation
+from ai_economist.foundation.scenarios.utils import social_metrics
 from tutorials.utils.plotting import breakdown
 from util.observation_batch import ObservationBatch
 from typing import Dict, List, Tuple
@@ -322,8 +323,28 @@ class PPO:
         correlation = np.corrcoef(percent_income_from_build, skills)[0, 1]
         endowments = list(b[2])
         productivity = sum(incomes)
-        equality = sum([log['rewards'][i]['p'] for i in range(len(log['rewards']))]) / productivity
-        # equality = foundation.scenarios.utils.get_equality(endowments)
+        equality = social_metrics.get_equality(np.array(endowments))
+        # embed()
+        tax_schedules = dict((i,log['PeriodicTax'][i])
+            for i in range(len(log['PeriodicTax'])) if isinstance(log['PeriodicTax'][i],dict))
+        immigration = dict((i,log['Citizenship'][i][0])
+            for i in range(len(log['Citizenship'])) if len(log['Citizenship'][i]) > 0)
+        population_delta = {nation:[] for nation in tax_schedules[99]['schedule'].keys()}
+        for i in range(len(log['Citizenship'])):
+            if i in immigration.keys():
+                for nation in population_delta.keys():
+                    delta = 0
+                    for immigrant in immigration[i]:
+                        if nation == immigrant['from_nation']:
+                            delta = delta - 1
+                        elif nation == immigrant['to_nation']:
+                            delta = delta + 1
+                    population_delta[nation].append(delta)
+            else:
+                for nation in population_delta.keys():
+                    population_delta[nation].append(0)
+
+        # embed()
         
         rewards = [[log['rewards'][i][agent] for i in range(len(log['rewards']))] for agent in log['rewards'][0].keys()]
         total_reward_per_timestep = [[rewards[0][0]],[rewards[1][0]],[rewards[2][0]],[rewards[3][0]]]
