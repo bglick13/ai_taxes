@@ -320,11 +320,21 @@ class PPO:
 
         incomes = list(np.round(b[1]['Total'], 3))
         percent_income_from_build = list(np.round(b[1]['Build']/b[1]['Total'], 3))
-        correlation = np.corrcoef(percent_income_from_build, skills)[0, 1]
         endowments = list(b[2])
         productivity = sum(incomes)
         equality = social_metrics.get_equality(np.array(endowments))
-        # embed()
+
+        action_counts = {str(idx):{'Gather':0, 'Build':0} for idx in range(len(incomes))}
+        for i in range(len(log['actions'])):
+            action_vector = log['actions'][i]
+            for idx in action_counts.keys():
+                if 'Gather' in action_vector[idx].keys():
+                    action_counts[idx]['Gather'] += 1
+                if 'Build' in action_vector[idx].keys():
+                    action_counts[idx]['Build'] += 1
+        specializations = [action_counts[idx]['Build'] / (action_counts[idx]['Build'] + action_counts[idx]['Gather'])
+            for idx in action_counts.keys()]
+
         tax_schedules = dict((i,log['PeriodicTax'][i])
             for i in range(len(log['PeriodicTax'])) if isinstance(log['PeriodicTax'][i],dict))
         immigration = dict((i,log['Citizenship'][i][0])
@@ -344,7 +354,6 @@ class PPO:
                 for nation in population_delta.keys():
                     population_delta[nation].append(0)
 
-        # embed()
         
         rewards = [[log['rewards'][i][agent] for i in range(len(log['rewards']))] for agent in log['rewards'][0].keys()]
         total_reward_per_timestep = [[rewards[0][0]],[rewards[1][0]],[rewards[2][0]],[rewards[3][0]]]
@@ -356,7 +365,7 @@ class PPO:
         with open(os.path.join('logs', 'log.txt'), mode) as f:
             log = (f"Agent incomes: {incomes}\n" +
                    f"Agent endowments: {endowments}\n" +
-                   f"Agent Specialization coeff: {correlation}\n" +
+                   f"Agent specializations: {specializations}\n" +
                    f"Total productivity: {productivity}\n" +
                    f"Total equality: {equality}\n" + 
                    f"Total utility: {equality * productivity}\n" +
