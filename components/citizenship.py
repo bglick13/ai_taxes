@@ -114,7 +114,7 @@ class OpenBorderCitizenship(BaseComponent):
         is_first_day = self.world.planner.state['tax_cycle_pos'] == 1
         is_first_period = len(self.world.planner.state['taxes']) < self.world.planner.state['period']
         for agent in self.world.agents:
-            masks[agent.idx] = np.ones(self.n_nations) if (is_first_day and not is_first_period) else np.zeros(self.n_nations)
+            masks[agent.idx] = np.ones(self.n_nations + 1) if (is_first_day and not is_first_period) else np.zeros(self.n_nations + 1)
             masks[agent.idx][self.nations_to_idx[agent.state['nation']] + 1] = 0  # Agent cannot immigrate to current nation
         return masks
 
