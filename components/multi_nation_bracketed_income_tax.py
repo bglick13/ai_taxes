@@ -486,6 +486,9 @@ class MalthusianPeriodicBracketTax(BaseComponent):
 
         # increment timestep
         self.tax_cycle_pos += 1
+        self.world.planner.state['tax_cycle_pos'] = self.tax_cycle_pos
+        self.world.planner.state['period'] = self.period
+        self.world.planner.state['taxes'] = self.taxes
 
     def generate_observations(self):
         """
