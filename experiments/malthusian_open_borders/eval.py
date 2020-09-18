@@ -15,7 +15,7 @@ if __name__ == '__main__':
     tax_planner_agent_model = TaxPlannerNeuralNet
 
     agent_spec = {
-        ('0', '1', '2', '3'): mobile_agent_model,
+        ('0', '1', '2', '3', '4', '5'): mobile_agent_model,
         ('p',): tax_planner_agent_model
     }
     trainer = PPO(env_config, agent_spec)

@@ -21,8 +21,7 @@ env_config = {
             # (3) Movement and resource collection
             ('Gather', {}),
             ("OpenBorderCitizenship", {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations}),
-            # TODO: Add annealling schedule to tax planner
-            ('MalthusianPeriodicBracketTax', {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations})
+            ('MalthusianPeriodicBracketTax', {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations, 'tax_annealing_schedule': [200, 0.01]})
         ],
         'nations': nations,
         'nations_to_idx': nations_to_idx,
@@ -33,7 +32,7 @@ env_config = {
 
         # ===== STANDARD ARGUMENTS ======
         # kwargs that are used by every Scenario class (i.e. defined in BaseEnvironment)
-        'n_agents': 4,  # Number of non-planner agents (must be > 1)
+        'n_agents': 6,  # Number of non-planner agents (must be > 1)
         'world_size': [25, 25],  # [Height, Width] of the env world
         'episode_length': 1000,  # Number of timesteps per episode
 

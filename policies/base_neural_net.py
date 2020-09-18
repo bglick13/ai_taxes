@@ -78,7 +78,7 @@ class BaseNeuralNet(nn.Module):
         mu = self.action_head(h)
         try:
             action_mask = torch.FloatTensor(self.obs.action_mask).to(self.device)
-            mu *= action_mask
+            mu[action_mask == 0] = -10000.
         except Exception as e:
             pass  # During training, we don't use action masks, so this happens
         mu = mu.softmax(-1)

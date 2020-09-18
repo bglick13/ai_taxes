@@ -72,7 +72,7 @@ class Memory(Dataset):
         # del self.hcs[:]
 
 
-def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, _eval=False, device='cuda'):
+def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, _eval=False, device='cuda', completions=0):
     """
 
     :param env_config:
@@ -86,6 +86,7 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
     :return:
     """
     env = foundation.make_env_instance(**env_config)
+    env._completions = completions  # Need this to make annealing work with multiprocessing
     obs = env.reset()
     t = range(n_rollouts)
     memory = dict((key, Memory()) for key in keys)
@@ -105,8 +106,6 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
         model_hcs = dict((key, (zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device=device),
                                 zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device=device))) for key in keys)
         for step in range(num_steps):
-            # TODO: Only sample planner actions if first timestep of period, else just update hidden state
-            # TODO: Train both models jointly as described in paper
             obs_batches = dict((key, ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True)) for key in keys)
             for key, item in model_hcs.items():
                 hcs[key].append(item)
@@ -271,23 +270,27 @@ class PPO:
         return losses, all_rewards
 
     def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps, experiment_name, n_jobs=1):
+        rollouts_per_jobs = 1
+        n_rollouts_per_training_step = 12
+        steps_per_rollouts = 500
+
+        def completion_number(it, job_idx):
+            return it * n_rollouts_per_training_step * rollouts_per_jobs + job_idx
+
         self.env_config['dense_log_frequency'] = 500
         writer = SummaryWriter()
         t = trange(n_training_steps, desc='Training Iteration', leave=True)
         if not os.path.isdir(f'weights/temp'):
             os.makedirs(f'weights/temp')
         for it in t:
-            # for key, spec in key_order:
-                # constructor = self.model_key_to_constructor[key]
             state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
-            rollouts_per_jobs = 1  #spec.get('rollouts_per_job', 1)
 
-            # rollout(self.env_config, np.array(key_order)[:, 0], self.model_key_to_constructor, state_dicts,
-            #         n_rollouts=1, num_steps=100)
             start = time.time()
             with mp.Pool(n_jobs) as pool:
-                result = pool.starmap(rollout, [(self.env_config, np.array(key_order)[:, 0], self.model_key_to_constructor, state_dicts, rollouts_per_jobs,
-                                                 500, False, self.device) for _ in range(12)])
+                result = pool.starmap(rollout, [(self.env_config, np.array(key_order)[:, 0],
+                                                 self.model_key_to_constructor, state_dicts, rollouts_per_jobs,
+                                                 steps_per_rollouts, False, self.device, completion_number(it, _))
+                                                for _ in range(n_rollouts_per_training_step)])
             print(f'rollouts took {time.time() - start}s')
             for key in self.model_key_to_constructor.keys():
                 self.memory[key] = join_memories([r[key] for r in result])
@@ -297,24 +300,31 @@ class PPO:
                     epochs = 4
                 else:
                     epochs = 16
-                losses, all_rewards = self.update(key, epochs, 1000)
+                batch_size = 3000 // len(key)
+                losses, all_rewards = self.update(key, epochs, batch_size)
                 writer.add_scalar(f'Loss/train_{key}', np.mean(losses), it)
                 writer.add_scalar(f'Reward/train_{key}', stack(all_rewards).mean().detach().cpu().numpy().round(3), it)
                 save(self.models[key].state_dict(), f'weights/temp/{key}_checkpoint_{it}.torch.temp')
                 self.memory[key].clear_memory()
             t.refresh()
-            # if (it+1) % 10 == 0:
-            #     self.eval(key_order, mode='a')
+
         for key, spec in key_order:
             save(self.models[key].state_dict(), f'weights/{key}_final.torch')
 
     def eval(self, key_order: List[Tuple[Tuple, Dict]], mode='w+'):
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
+
+        self.env_config['components'][-1][1]['tax_annealing_schedule'] = None
         dense_logs = list()
         state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
 
         _, log, skills = rollout(self.env_config, np.array(list(key_order.keys())), self.model_key_to_constructor, state_dicts,
                 n_rollouts=1, num_steps=1000, _eval=True)
-
+        with open('logs/dense_log.pickle', 'wb') as f:
+            pickle.dump(log, f)
+        with open('logs/skills.pickle', 'wb') as f:
+            pickle.dump(skills, f)
         dense_logs.append(log)
         b = breakdown(log)
 
@@ -354,8 +364,8 @@ class PPO:
                 for nation in population_delta.keys():
                     population_delta[nation].append(0)
 
-        
         rewards = [[log['rewards'][i][agent] for i in range(len(log['rewards']))] for agent in log['rewards'][0].keys()]
+        # TODO(Connor): this is hard coded for just 4 agents
         total_reward_per_timestep = [[rewards[0][0]],[rewards[1][0]],[rewards[2][0]],[rewards[3][0]]]
         for i in range(1, len(rewards[0])):
             for j in range(len(rewards)-1):

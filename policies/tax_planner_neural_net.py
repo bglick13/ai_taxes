@@ -13,7 +13,7 @@ class TaxPlannerNeuralNet(BaseNeuralNet):
         mu = torch.stack([ah(h) for ah in self.action_head]).to(self.device).permute(1, 0, 2)
         try:
             action_mask = torch.FloatTensor(np.array(list(self.obs.action_mask))).to(self.device)
-            mu *= action_mask
+            mu[action_mask == 0] = -10000.
         except:
             pass
         mu = mu.softmax(-1)
