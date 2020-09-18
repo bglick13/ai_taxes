@@ -80,7 +80,7 @@ class BaseNeuralNet(nn.Module):
             action_mask = torch.FloatTensor(self.obs.action_mask).to(self.device)
             mu *= action_mask
         except Exception as e:
-            print(f'exception in action mask:\n{e}')
+            pass  # During training, we don't use action masks, so this happens
         mu = mu.softmax(-1)
         dist = torch.distributions.Categorical(mu)
         return dist

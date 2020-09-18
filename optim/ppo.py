@@ -72,7 +72,7 @@ class Memory(Dataset):
         # del self.hcs[:]
 
 
-def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, _eval=False):
+def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, _eval=False, device='cuda'):
     """
 
     :param env_config:
@@ -89,7 +89,7 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
     obs = env.reset()
     t = range(n_rollouts)
     memory = dict((key, Memory()) for key in keys)
-    models = dict((key, constructors[key](device='cpu')) for key in keys)
+    models = dict((key, constructors[key](device=device)) for key in keys)
     for key, model in models.items():
         model.build_models(ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True))
         model.load_state_dict(state_dicts[key], strict=False)
@@ -102,8 +102,8 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
                                                                  dict((key, []) for key in keys),
                                                                  dict((key, []) for key in keys),
                                                                  dict((key, []) for key in keys))
-        model_hcs = dict((key, (zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device='cpu'),
-                                zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device='cpu'))) for key in keys)
+        model_hcs = dict((key, (zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device=device),
+                                zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device=device))) for key in keys)
         for step in range(num_steps):
             # TODO: Only sample planner actions if first timestep of period, else just update hidden state
             # TODO: Train both models jointly as described in paper
@@ -233,16 +233,16 @@ class PPO:
                 world_maps = world_maps.reshape(batch_size * world_maps.shape[1], world_maps.shape[2], world_maps.shape[3], world_maps.shape[4])
                 flat_inputs = flat_inputs.reshape(batch_size * flat_inputs.shape[1], flat_inputs.shape[2])
                 if 'p' in key:
-                    actions = actions.reshape(-1, actions.shape[-1]).to(self.device)
+                    actions = actions.reshape(-1, actions.shape[-1]).to('cuda')
                 else:
-                    actions = actions.reshape(-1, 1).to(self.device)
-                old_logprobs = old_logprobs.flatten().unsqueeze(-1).to(self.device)
-                advantages = stack(advantages).reshape(-1, 1).to(self.device)
-                rewards = stack(rewards).reshape(-1, 1).to(self.device)
+                    actions = actions.reshape(-1, 1).to('cuda')
+                old_logprobs = old_logprobs.flatten().unsqueeze(-1).to('cuda')
+                advantages = stack(advantages).reshape(-1, 1).to('cuda')
+                rewards = stack(rewards).reshape(-1, 1).to('cuda')
                 hs = hcs[0].squeeze()
                 cs = hcs[1].squeeze()
-                hs = hs.reshape(hs.shape[0] * hs.shape[1], hs.shape[2]).to(self.device).unsqueeze(0)  # (batch_size, n_agents, hidden_size)
-                cs = cs.reshape(cs.shape[0] * cs.shape[1], cs.shape[2]).to(self.device).unsqueeze(0)  # (batch_size, n_agents, hidden_size)
+                hs = hs.reshape(hs.shape[0] * hs.shape[1], hs.shape[2]).to('cuda').unsqueeze(0)  # (batch_size, n_agents, hidden_size)
+                cs = cs.reshape(cs.shape[0] * cs.shape[1], cs.shape[2]).to('cuda').unsqueeze(0)  # (batch_size, n_agents, hidden_size)
 
                 hcs = (hs, cs)
 
@@ -287,7 +287,7 @@ class PPO:
             start = time.time()
             with mp.Pool(n_jobs) as pool:
                 result = pool.starmap(rollout, [(self.env_config, np.array(key_order)[:, 0], self.model_key_to_constructor, state_dicts, rollouts_per_jobs,
-                                                 500) for _ in range(12)])
+                                                 500, False, self.device) for _ in range(12)])
             print(f'rollouts took {time.time() - start}s')
             for key in self.model_key_to_constructor.keys():
                 self.memory[key] = join_memories([r[key] for r in result])

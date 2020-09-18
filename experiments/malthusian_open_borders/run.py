@@ -14,7 +14,7 @@ if __name__ == '__main__':
         ('0', '1', '2', '3'): mobile_agent_model,
         ('p', ): tax_planner_agent_model
     }
-    trainer = PPO(env_config, agent_spec)
+    trainer = PPO(env_config, agent_spec, lr=0.0001)
     train_spec = [
         (('0', '1', '2', '3'),
          {'n_rollouts': 60, 'n_steps_per_rollout': 1000, 'epochs_per_train_step': 16, 'batch_size': 1000, 'rollouts_per_job': 1}),
