@@ -42,7 +42,7 @@ class ObservationBatch:
             if flatten_action_masks:
                 action_masks = []
                 for am in self.obs['action_mask'].values:
-                    action_masks.append(np.concatenate(list(am.values())))
+                    action_masks.append(np.concatenate([[1]] + list(am.values())))
                 self.action_mask = np.array(action_masks)
             else:
                 action_masks = []

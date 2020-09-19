@@ -28,7 +28,7 @@ env_config = {
         'idx_to_nations': idx_to_nations,
         # ===== SCENARIO CLASS ARGUMENTS =====
         # (optional) kwargs that are added by the Scenario class (i.e. not defined in BaseEnvironment)
-        'starting_agent_coin': 10,
+        'starting_agent_coin': 20,
 
         # ===== STANDARD ARGUMENTS ======
         # kwargs that are used by every Scenario class (i.e. defined in BaseEnvironment)
