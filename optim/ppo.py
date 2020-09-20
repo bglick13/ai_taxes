@@ -105,6 +105,7 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
                                                                  dict((key, []) for key in keys))
         model_hcs = dict((key, (zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device=device),
                                 zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device=device))) for key in keys)
+        total_builds = 0
         for step in range(num_steps):
             obs_batches = dict((key, ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True)) for key in keys)
             for key, item in model_hcs.items():
@@ -116,6 +117,7 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
                 model_hcs[key] = hc
                 a = dist.sample().detach()
                 if 'p' not in key:
+                    total_builds += (a == 1).detach().cpu().numpy().sum()
                     actions[key].append(a.detach())
                     logprob = dist.log_prob(a).detach()
                     logprobs[key].append(logprob)
@@ -165,7 +167,7 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
     if _eval:
         return memory, env.previous_episode_dense_log, [agent.state['build_skill'] for agent in env.world.agents]
     else:
-        return memory
+        return memory, total_builds
 
 
 def compute_gae(next_value, rewards, masks, values, tau=0.98, gamma=0.998):
@@ -213,10 +215,13 @@ class PPO:
             self.optimizers[key] = Adam(value.parameters(), lr=self.lr)
 
     def load_weights_from_file(self):
+        checkpoint = load(f'weights/final.torch')
         for key, value in self.models.items():
             # weights = load(os.path.join('weights', str(key)+'_final.torch'))
-            weights = load(os.path.join(f'weights/{key}_final.torch'))
+            weights = checkpoint[f'model_{key}']
+            opt = checkpoint[f'opt_{key}']
             self.models[key].load_state_dict(weights)
+            self.optimizers[key].load_state_dict(opt)
 
     def update(self, key, epochs, batch_size=1, shuffle=False, num_workers=0):
         losses = []
@@ -272,7 +277,7 @@ class PPO:
     def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps, experiment_name, n_jobs=1):
         rollouts_per_jobs = 1
         n_rollouts_per_training_step = 12
-        steps_per_rollouts = 500
+        steps_per_rollouts = 1000
 
         def completion_number(it, job_idx):
             return it * n_rollouts_per_training_step * rollouts_per_jobs + job_idx
@@ -282,6 +287,17 @@ class PPO:
         t = trange(n_training_steps, desc='Training Iteration', leave=True)
         if not os.path.isdir(f'weights/temp'):
             os.makedirs(f'weights/temp')
+
+        env = foundation.make_env_instance(**self.env_config)
+        obs = env.reset()
+        agent = env.get_agent('0')
+        for i in range(agent.action_spaces):
+            if i == 0:
+                print(f'{i}: NO-OP')
+                continue
+            action_name, action = agent.single_action_map.get(i)
+            print(f'{i}: {action_name}: {action}')
+
         for it in t:
             state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
 
@@ -291,10 +307,12 @@ class PPO:
                                                  self.model_key_to_constructor, state_dicts, rollouts_per_jobs,
                                                  steps_per_rollouts, False, self.device, completion_number(it, _))
                                                 for _ in range(n_rollouts_per_training_step)])
-            print(f'rollouts took {time.time() - start}s')
+            writer.add_scalar(f'Metric/n_builds', {np.mean([r[1] for r in result])})
+            print(f'rollouts took {time.time() - start}s, average builds: {np.mean([r[1] for r in result])}')
             for key in self.model_key_to_constructor.keys():
-                self.memory[key] = join_memories([r[key] for r in result])
+                self.memory[key] = join_memories([r[0][key] for r in result])
 
+            checkpoint = dict()
             for key in self.memory.keys():
                 if 'p' in key:
                     epochs = 4
@@ -304,12 +322,18 @@ class PPO:
                 losses, all_rewards = self.update(key, epochs, batch_size)
                 writer.add_scalar(f'Loss/train_{key}', np.mean(losses), it)
                 writer.add_scalar(f'Reward/train_{key}', stack(all_rewards).mean().detach().cpu().numpy().round(3), it)
-                save(self.models[key].state_dict(), f'weights/temp/{key}_checkpoint_{it}.torch.temp')
+                checkpoint[f'model_{key}'] = self.models[key].state_dict()
+                checkpoint[f'opt_{key}'] = self.optimizers[key].state_dict()
+
                 self.memory[key].clear_memory()
+            save(checkpoint, f'weights/temp/checkpoint_{it}.torch.temp')
             t.refresh()
 
+        checkpoint = dict()
         for key, spec in key_order:
-            save(self.models[key].state_dict(), f'weights/{key}_final.torch')
+            checkpoint[f'model_{key}'] = self.models[key].state_dict()
+            checkpoint[f'opt_{key}'] = self.optimizers[key].state_dict()
+        save(checkpoint, f'weights/final.torch')
 
     def eval(self, key_order: List[Tuple[Tuple, Dict]], mode='w+'):
         if not os.path.exists('logs'):
