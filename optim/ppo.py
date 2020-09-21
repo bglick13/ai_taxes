@@ -280,7 +280,7 @@ class PPO:
                 self.optimizers[key].step()
         return losses, all_rewards
 
-    def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps, experiment_name, n_jobs=1):
+    def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps, starting_it=0, n_jobs=1):
         rollouts_per_jobs = 1
         n_rollouts_per_training_step = 12
         steps_per_rollouts = 1000
@@ -290,7 +290,7 @@ class PPO:
 
         self.env_config['dense_log_frequency'] = None
         writer = SummaryWriter()
-        t = trange(n_training_steps, desc='Training Iteration', leave=True)
+        t = trange(starting_it, starting_it + n_training_steps, desc='Training Iteration', leave=True)
         if not os.path.isdir(f'weights/temp'):
             os.makedirs(f'weights/temp')
 
@@ -320,6 +320,7 @@ class PPO:
                 self.memory[key] = join_memories([r[0][key] for r in result])
 
             checkpoint = dict()
+            checkpoint['it'] = it
             for key in self.memory.keys():
                 if 'p' in key:
                     epochs = 4

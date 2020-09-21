@@ -24,4 +24,4 @@ if __name__ == '__main__':
     n_epochs = 200
     trainer.load_weights_from_file(from_checkpoint=True)
     print(f'Training for {train_spec[0][1]["n_rollouts"] * train_spec[0][1]["n_steps_per_rollout"] * len(train_spec[0][0]) * n_epochs} total steps')
-    trainer.train(train_spec, n_epochs, experiment_name, n_jobs=6)
+    trainer.train(train_spec, n_epochs, n_jobs=6, starting_it=0)

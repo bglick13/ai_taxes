@@ -15,7 +15,8 @@ class OpenBorderCitizenship(BaseComponent):
     required_entities = []
     agent_subclasses = ["BasicMobileAgent"]
 
-    def __init__(self, *args, nations=None, nations_to_idx=None, idx_to_nations=None, relocate_on_immigrate=True, labor_cost=10.0, **kwargs):
+    def __init__(self, *args, nations=None, nations_to_idx=None, idx_to_nations=None, relocate_on_immigrate=True,
+                 labor_cost=10.0, annealing_steps=None, **kwargs):
         super().__init__(*args, **kwargs)
         if nations is None:
             self.nations = ['foo_land', 'bar_land']
@@ -28,6 +29,7 @@ class OpenBorderCitizenship(BaseComponent):
         self.labor_cost = labor_cost
         self.citizenship_count = dict((n, 0) for n in self.nations)
         self.immigrations = []
+        self.annealing_steps = annealing_steps
         # embed()
 
     def get_n_actions(self, agent_cls_name):
@@ -114,8 +116,7 @@ class OpenBorderCitizenship(BaseComponent):
     def generate_masks(self, completions=0):
         self.step += 1
         masks = {}
-        # TODO: Implement annealing similar to taxes
-        is_first_half = (self.world.planner.state['tax_cycle_pos'] / self.world.planner.state['period']) <= 0.5
+        is_first_half = (self.world.planner.state['tax_cycle_pos'] / self.world.planner.state['period']) <= 0.5 - min(((completions / self.annealing_steps) * 0.49), 0.49)
         # is_first_day = self.world.planner.state['tax_cycle_pos'] == 1
         # is_first_period = len(self.world.planner.state['taxes']) < self.world.planner.state['period']
 

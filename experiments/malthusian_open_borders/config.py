@@ -20,7 +20,7 @@ env_config = {
             ('ContinuousDoubleAuction', {'max_num_orders': 5}),
             # (3) Movement and resource collection
             ('Gather', {}),
-            ("OpenBorderCitizenship", {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations}),
+            ("OpenBorderCitizenship", {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations, 'annealing_steps': 200}),
             ('MalthusianPeriodicBracketTax', {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations, 'tax_annealing_schedule': [200, 0.01]})
         ],
         'nations': nations,
