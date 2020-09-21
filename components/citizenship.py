@@ -15,7 +15,7 @@ class OpenBorderCitizenship(BaseComponent):
     required_entities = []
     agent_subclasses = ["BasicMobileAgent"]
 
-    def __init__(self, *args, nations=None, nations_to_idx=None, idx_to_nations=None, relocate_on_immigrate=False, **kwargs):
+    def __init__(self, *args, nations=None, nations_to_idx=None, idx_to_nations=None, relocate_on_immigrate=True, labor_cost=10.0, **kwargs):
         super().__init__(*args, **kwargs)
         if nations is None:
             self.nations = ['foo_land', 'bar_land']
@@ -25,6 +25,7 @@ class OpenBorderCitizenship(BaseComponent):
         self.nations_to_idx = nations_to_idx
         self.idx_to_nations = idx_to_nations
         self.relocate_on_immigrate = relocate_on_immigrate
+        self.labor_cost = labor_cost
         self.citizenship_count = dict((n, 0) for n in self.nations)
         self.immigrations = []
         # embed()
@@ -69,7 +70,7 @@ class OpenBorderCitizenship(BaseComponent):
                     from_nation=agent.state['nation'],
                     to_nation=self.idx_to_nations[action - 1]
                 )])
-
+                agent.state["endogenous"]["Labor"] += self.labor_cost
                 agent.state['nation'] = self.idx_to_nations[action - 1]
                 agent.state['nation_idx'] = action - 1
                 
@@ -80,16 +81,17 @@ class OpenBorderCitizenship(BaseComponent):
 
                 # TODO: Make sure that an agent cannot spawn in a different nation's zone(s).
                 #       This could happen if width != height.
-                tmp = []
-                while not self.world.can_agent_occupy(r, c, agent):
-                    r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
-                    c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
-                    n_tries += 1
-                    tmp.append((r, c))
-                    if n_tries > 200:
-                        print(tmp)
-                        raise TimeoutError
-                self.world.set_agent_loc(agent, r, c)
+                if self.relocate_on_immigrate:
+                    tmp = []
+                    while not self.world.can_agent_occupy(r, c, agent):
+                        r = np.random.randint(agent_nation_zone[0][1], agent_nation_zone[2][1] + 1)
+                        c = np.random.randint(agent_nation_zone[0][0], agent_nation_zone[1][0] + 1)
+                        n_tries += 1
+                        tmp.append((r, c))
+                        if n_tries > 200:
+                            print(tmp)
+                            raise TimeoutError
+                    self.world.set_agent_loc(agent, r, c)
 
             else:
                 raise ValueError
@@ -112,11 +114,13 @@ class OpenBorderCitizenship(BaseComponent):
     def generate_masks(self, completions=0):
         self.step += 1
         masks = {}
-        is_first_day = self.world.planner.state['tax_cycle_pos'] == 1
-        is_first_period = len(self.world.planner.state['taxes']) < self.world.planner.state['period']
+        # TODO: Implement annealing similar to taxes
+        is_first_half = (self.world.planner.state['tax_cycle_pos'] / self.world.planner.state['period']) <= 0.5
+        # is_first_day = self.world.planner.state['tax_cycle_pos'] == 1
+        # is_first_period = len(self.world.planner.state['taxes']) < self.world.planner.state['period']
 
         for agent in self.world.agents:
-            masks[agent.idx] = np.ones(self.n_nations) if (is_first_day and not is_first_period) else np.zeros(self.n_nations)
+            masks[agent.idx] = np.ones(self.n_nations) if is_first_half else np.zeros(self.n_nations)
             masks[agent.idx][self.nations_to_idx[agent.state['nation']]] = 0  # Agent cannot immigrate to current nation
         return masks
 

@@ -8,3 +8,5 @@ optim/__pycache__/
 *.pyc
 *.temp
 *.0
+
+*.torch

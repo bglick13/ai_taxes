@@ -105,7 +105,7 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
                                                                  dict((key, []) for key in keys))
         model_hcs = dict((key, (zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device=device),
                                 zeros(1, 2 if 'p' in key else len(key), models[key].lstm_size, device=device))) for key in keys)
-        total_builds = 0
+        metrics = dict(total_builds=0, total_immigrations=0)
         for step in range(num_steps):
             obs_batches = dict((key, ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True)) for key in keys)
             for key, item in model_hcs.items():
@@ -117,7 +117,8 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
                 model_hcs[key] = hc
                 a = dist.sample().detach()
                 if 'p' not in key:
-                    total_builds += (a == 1).detach().cpu().numpy().sum()
+                    metrics['total_builds'] += (a == 1).detach().cpu().numpy().sum()
+                    metrics['total_immigrations'] += (a >= 50).detach().cpu().numpy().sum()
                     actions[key].append(a.detach())
                     logprob = dist.log_prob(a).detach()
                     logprobs[key].append(logprob)
@@ -165,9 +166,9 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
             discounted_rewards = discounted_rewards.tolist()
             memory[key].add_trace(states[key], actions[key], logprobs[key], discounted_rewards, advantage, hcs[key])
     if _eval:
-        return memory, env.previous_episode_dense_log, [agent.state['build_skill'] for agent in env.world.agents]
+        return memory, env.previous_episode_dense_log, env.mixing_weight_gini_vs_coin
     else:
-        return memory, total_builds
+        return memory, metrics
 
 
 def compute_gae(next_value, rewards, masks, values, tau=0.98, gamma=0.998):
@@ -214,8 +215,13 @@ class PPO:
         for key, value in self.models.items():
             self.optimizers[key] = Adam(value.parameters(), lr=self.lr)
 
-    def load_weights_from_file(self):
-        checkpoint = load(f'weights/final.torch')
+    def load_weights_from_file(self, from_checkpoint=False):
+        if from_checkpoint:
+            files = os.listdir('weights/temp')
+            files.sort(key=lambda x: os.path.getmtime(f'weights/temp/{x}'))
+            checkpoint = load(f'weights/temp/{files[-1]}')
+        else:
+            checkpoint = load(f'weights/final.torch')
         for key, value in self.models.items():
             # weights = load(os.path.join('weights', str(key)+'_final.torch'))
             weights = checkpoint[f'model_{key}']
@@ -282,7 +288,7 @@ class PPO:
         def completion_number(it, job_idx):
             return it * n_rollouts_per_training_step * rollouts_per_jobs + job_idx
 
-        self.env_config['dense_log_frequency'] = 500
+        self.env_config['dense_log_frequency'] = None
         writer = SummaryWriter()
         t = trange(n_training_steps, desc='Training Iteration', leave=True)
         if not os.path.isdir(f'weights/temp'):
@@ -307,8 +313,9 @@ class PPO:
                                                  self.model_key_to_constructor, state_dicts, rollouts_per_jobs,
                                                  steps_per_rollouts, False, self.device, completion_number(it, _))
                                                 for _ in range(n_rollouts_per_training_step)])
-            writer.add_scalar(f'Metric/n_builds', {np.mean([r[1] for r in result])})
-            print(f'rollouts took {time.time() - start}s, average builds: {np.mean([r[1] for r in result])}')
+            writer.add_scalar(f'Metric/n_builds', np.mean([r[1]['total_builds'] for r in result]), it)
+            writer.add_scalar(f'Metric/n_immigrations', np.mean([r[1]['total_immigrations'] for r in result]), it)
+            print(f'rollouts took {time.time() - start}s')
             for key in self.model_key_to_constructor.keys():
                 self.memory[key] = join_memories([r[0][key] for r in result])
 
@@ -340,15 +347,16 @@ class PPO:
             os.mkdir('logs')
 
         self.env_config['components'][-1][1]['tax_annealing_schedule'] = None
+        self.env_config['mixing_weight_gini_vs_coin'] = dict(foo_land=0.8, bar_land=0.2)
         dense_logs = list()
         state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
 
-        _, log, skills = rollout(self.env_config, np.array(list(key_order.keys())), self.model_key_to_constructor, state_dicts,
+        _, log, mixing_weights = rollout(self.env_config, np.array(list(key_order.keys())), self.model_key_to_constructor, state_dicts,
                 n_rollouts=1, num_steps=1000, _eval=True)
         with open('logs/dense_log.pickle', 'wb') as f:
             pickle.dump(log, f)
-        with open('logs/skills.pickle', 'wb') as f:
-            pickle.dump(skills, f)
+        with open('logs/mixing_weights.pickle', 'wb') as f:
+            pickle.dump(mixing_weights, f)
         dense_logs.append(log)
         b = breakdown(log)
 
