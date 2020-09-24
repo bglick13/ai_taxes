@@ -116,7 +116,11 @@ class OpenBorderCitizenship(BaseComponent):
     def generate_masks(self, completions=0):
         self.step += 1
         masks = {}
-        is_first_half = (self.world.planner.state['tax_cycle_pos'] / self.world.planner.state['period']) <= 0.5 - min(((completions / self.annealing_steps) * 0.49), 0.49)
+        if self.annealing_steps is None:
+            cutoff = 0.01
+        else:
+            cutoff = 0.5 - min(((completions / self.annealing_steps) * 0.49), 0.49)
+        is_first_half = (self.world.planner.state['tax_cycle_pos'] / self.world.planner.state['period']) <= cutoff
         # is_first_day = self.world.planner.state['tax_cycle_pos'] == 1
         # is_first_period = len(self.world.planner.state['taxes']) < self.world.planner.state['period']
 

@@ -11,10 +11,11 @@ if __name__ == '__main__':
     mobile_agent_model = MobileAgentNeuralNet
     tax_planner_agent_model = TaxPlannerNeuralNet
     agent_spec = {
-        ('0', '1', '2', '3', '4', '5'): mobile_agent_model,
-        ('p', ): tax_planner_agent_model
+        ('0', '1', '2', '3', '4', '5'): dict(constructor=mobile_agent_model, lr=0.0003, entropy_loss_coef=0.025),
+        ('p', ): dict(constructor=tax_planner_agent_model, lr=0.0001, entropy_loss_coef=0.1)
     }
-    trainer = PPO(env_config, agent_spec, lr=0.0001)
+    env_config['dense_log_frequency'] = None
+    trainer = PPO(env_config, agent_spec)
     train_spec = [
         (('0', '1', '2', '3', '4', '5'),
          {'n_rollouts': 60, 'n_steps_per_rollout': 1000, 'epochs_per_train_step': 16, 'batch_size': 1000, 'rollouts_per_job': 1}),
@@ -22,6 +23,6 @@ if __name__ == '__main__':
          {'n_rollouts': 60, 'n_steps_per_rollout': 1000, 'epochs_per_train_step': 16, 'batch_size': 1000, 'rollouts_per_job': 1})
     ]
     n_epochs = 200
-    trainer.load_weights_from_file(from_checkpoint=True)
+    # trainer.load_weights_from_file(from_checkpoint=True)
     print(f'Training for {train_spec[0][1]["n_rollouts"] * train_spec[0][1]["n_steps_per_rollout"] * len(train_spec[0][0]) * n_epochs} total steps')
     trainer.train(train_spec, n_epochs, n_jobs=6, starting_it=0)

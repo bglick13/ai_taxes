@@ -2,6 +2,7 @@
 import time
 
 from torch import stack, zeros, clamp, min, save, load
+from torch.nn.utils import clip_grad_norm_
 from torch.optim import Adam
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
@@ -90,7 +91,7 @@ def rollout(env_config, keys, constructors, state_dicts, n_rollouts, num_steps, 
     obs = env.reset()
     t = range(n_rollouts)
     memory = dict((key, Memory()) for key in keys)
-    models = dict((key, constructors[key](device=device)) for key in keys)
+    models = dict((key, constructors[key]['constructor'](device=device)) for key in keys)
     for key, model in models.items():
         model.build_models(ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True))
         model.load_state_dict(state_dicts[key], strict=False)
@@ -193,7 +194,7 @@ def join_memories(memories: List[Memory]):
 
 
 class PPO:
-    def __init__(self, env_config, models: Dict[Tuple, BaseNeuralNet], lr=0.0003, gamma=0.998, clip_param=0.2, entropy_coef=0.025,
+    def __init__(self, env_config, models: Dict[Tuple, BaseNeuralNet], gamma=0.998, clip_param=0.2,
                  value_loss_coef=0.05, device='cuda'):
         self.memory = dict()
         self.device = device
@@ -203,17 +204,15 @@ class PPO:
         self.model_key_to_constructor = models
         obs = env.reset()
         for key, value in models.items():
-            self.models[key] = value(device=self.device)
+            self.models[key] = value['constructor'](device=self.device)
             self.models[key].build_models(ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True))
             self.memory[key] = Memory()
-        self.lr = lr
         self.gamma = gamma
         self.clip_param = clip_param
-        self.entropy_coef = entropy_coef
         self.value_loss_coef = value_loss_coef
         self.optimizers = dict()
         for key, value in self.models.items():
-            self.optimizers[key] = Adam(value.parameters(), lr=self.lr)
+            self.optimizers[key] = Adam(value.parameters(), lr=models[key]['lr'])
 
     def load_weights_from_file(self, from_checkpoint=False):
         if from_checkpoint:
@@ -229,10 +228,11 @@ class PPO:
             self.models[key].load_state_dict(weights)
             self.optimizers[key].load_state_dict(opt)
 
-    def update(self, key, epochs, batch_size=1, shuffle=False, num_workers=0):
+    def update(self, key, epochs, batch_size=1, shuffle=True, num_workers=0):
         losses = []
         all_rewards = []
         self.models[key].to('cuda')
+        # TODO: Check whether "policy updates / horizon" means epochs or batches...
         for epoch in range(epochs):
             dataloader = DataLoader(self.memory[key], batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
             for i, batch in enumerate(dataloader):
@@ -270,11 +270,11 @@ class PPO:
                 actor_loss = - min(surr1, surr2).mean()
                 critic_loss = (rewards - value).pow(2).mean()
 
-                loss = self.value_loss_coef * critic_loss + actor_loss - self.entropy_coef * entropy
+                loss = self.value_loss_coef * critic_loss + actor_loss - self.model_key_to_constructor[key]['entropy_loss_coef'] * entropy
                 # print(f'Epoch: {epoch} Loss: {loss}')
                 self.optimizers[key].zero_grad()
-                # clip_grad_norm_(self.models[key].parameters(), 10)
                 loss.backward()
+                clip_grad_norm_(self.models[key].parameters(), 10)
                 losses.append(loss.detach().cpu().numpy())
 
                 self.optimizers[key].step()
@@ -288,7 +288,6 @@ class PPO:
         def completion_number(it, job_idx):
             return it * n_rollouts_per_training_step * rollouts_per_jobs + job_idx
 
-        self.env_config['dense_log_frequency'] = None
         writer = SummaryWriter()
         t = trange(starting_it, starting_it + n_training_steps, desc='Training Iteration', leave=True)
         if not os.path.isdir(f'weights/temp'):
@@ -315,6 +314,8 @@ class PPO:
                                                 for _ in range(n_rollouts_per_training_step)])
             writer.add_scalar(f'Metric/n_builds', np.mean([r[1]['total_builds'] for r in result]), it)
             writer.add_scalar(f'Metric/n_immigrations', np.mean([r[1]['total_immigrations'] for r in result]), it)
+            n_sim_steps = np.round((it * n_rollouts_per_training_step * steps_per_rollouts * len(key_order[0][0])) / 1000000.)
+            writer.add_scalar(f'Metric/n_simulator_steps (m)', n_sim_steps, it)
             print(f'rollouts took {time.time() - start}s')
             for key in self.model_key_to_constructor.keys():
                 self.memory[key] = join_memories([r[0][key] for r in result])
@@ -323,9 +324,9 @@ class PPO:
             checkpoint['it'] = it
             for key in self.memory.keys():
                 if 'p' in key:
-                    epochs = 4
+                    epochs = 1
                 else:
-                    epochs = 16
+                    epochs = 1
                 batch_size = 3000 // len(key)
                 losses, all_rewards = self.update(key, epochs, batch_size)
                 writer.add_scalar(f'Loss/train_{key}', np.mean(losses), it)
@@ -347,8 +348,9 @@ class PPO:
         if not os.path.exists('logs'):
             os.mkdir('logs')
 
-        self.env_config['components'][-1][1]['tax_annealing_schedule'] = None
-        self.env_config['mixing_weight_gini_vs_coin'] = dict(foo_land=0.8, bar_land=0.2)
+        # self.env_config['components'][-1][1]['tax_annealing_schedule'] = None
+        # self.env_config['components'][-1][1]['tax_annealing_schedule'] = None
+        # self.env_config['mixing_weight_gini_vs_coin'] = dict(foo_land=0.8, bar_land=0.2)
         dense_logs = list()
         state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
 
