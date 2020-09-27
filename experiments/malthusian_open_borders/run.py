@@ -22,7 +22,8 @@ if __name__ == '__main__':
         (('p', ),
          {'n_rollouts': 60, 'n_steps_per_rollout': 1000, 'epochs_per_train_step': 16, 'batch_size': 1000, 'rollouts_per_job': 1})
     ]
-    n_epochs = 200
+    n_epochs = 2000
+    n_jobs = 24
     # trainer.load_weights_from_file(from_checkpoint=True)
-    print(f'Training for {train_spec[0][1]["n_rollouts"] * train_spec[0][1]["n_steps_per_rollout"] * len(train_spec[0][0]) * n_epochs} total steps')
-    trainer.train(train_spec, n_epochs, n_jobs=6, starting_it=0)
+    print(f'Training for {n_jobs * 1000 * len(train_spec[0][0]) * n_epochs} total steps')
+    trainer.train(train_spec, n_epochs, n_jobs=n_jobs, starting_it=0)

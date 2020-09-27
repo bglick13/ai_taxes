@@ -282,7 +282,7 @@ class PPO:
 
     def train(self, key_order: List[Tuple[Tuple, Dict]], n_training_steps, starting_it=0, n_jobs=1):
         rollouts_per_jobs = 1
-        n_rollouts_per_training_step = 12
+        n_rollouts_per_training_step = n_jobs
         steps_per_rollouts = 1000
 
         def completion_number(it, job_idx):
@@ -335,7 +335,8 @@ class PPO:
                 checkpoint[f'opt_{key}'] = self.optimizers[key].state_dict()
 
                 self.memory[key].clear_memory()
-            save(checkpoint, f'weights/temp/checkpoint_{it}.torch.temp')
+            if it % 100 == 0:
+                save(checkpoint, f'weights/temp/checkpoint_{it}.torch.temp')
             t.refresh()
 
         checkpoint = dict()
