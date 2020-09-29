@@ -1,9 +1,8 @@
-import torch
-from typing import Union, List, Dict, Tuple
 import re
+from typing import Union, List, Dict, Tuple
+
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_numeric_dtype
 
 
 class ObservationBatch:

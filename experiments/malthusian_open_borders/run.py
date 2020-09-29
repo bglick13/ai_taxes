@@ -1,11 +1,13 @@
-import os, sys
+import os
+import sys
+
 current_file_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(current_file_path, '..', '..'))
 
 from optim.ppo import PPO
 from policies.mobile_agent_neural_net import MobileAgentNeuralNet
 from policies.tax_planner_neural_net import TaxPlannerNeuralNet
-from experiments.malthusian_open_borders.config import env_config, experiment_name
+from experiments.malthusian_open_borders.config import env_config
 
 if __name__ == '__main__':
     mobile_agent_model = MobileAgentNeuralNet

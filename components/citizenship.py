@@ -1,5 +1,4 @@
 import numpy as np
-from IPython import embed
 
 from ai_economist.foundation.base.base_component import (
     BaseComponent,

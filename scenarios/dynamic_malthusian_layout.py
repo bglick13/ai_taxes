@@ -1,12 +1,9 @@
 from copy import deepcopy
 
 import numpy as np
-from scipy import signal
-from IPython import embed
-
 from ai_economist.foundation.base.base_env import BaseEnvironment, scenario_registry
-
 from ai_economist.foundation.scenarios.utils import rewards, social_metrics
+from scipy import signal
 
 
 @scenario_registry.add
