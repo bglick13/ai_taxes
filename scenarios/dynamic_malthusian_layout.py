@@ -210,6 +210,7 @@ class MalthusianUniform(BaseEnvironment):
             self.mixing_weight_gini_vs_coin = dict((n, np.random.uniform()) for n in self.nations)
         else:
             self.mixing_weight_gini_vs_coin = mixing_weight_gini_vs_coin
+        self.world.mixing_weights = list(self.mixing_weight_gini_vs_coin.values())
 
         # Use this to calculate marginal changes and deliver that as reward
         self.init_optimization_metric = {agent.idx: 0 for agent in self.all_agents}

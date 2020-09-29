@@ -368,7 +368,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
 
     def enact_taxes(self):
         """Calculate period income & tax burden. Collect taxes and redistribute."""
-        self.last_nationality = [a.state['nation'] for a in self.world.agents]
+        self.last_nationality = [self.nations_to_idx[a.state['nation']] for a in self.world.agents]
         net_tax_revenue = dict((n, 0) for n in self.nations)
         tax_dict = dict(
             schedule=self.curr_marginal_rates,
@@ -519,15 +519,19 @@ class MalthusianPeriodicBracketTax(BaseComponent):
                 last_incomes=self._last_income_obs_sorted,  # Planners see the incomes of each agent, regardless of nation
                 last_nationalities=self._last_income_nationality_obs_sorted,  # Planners see nationality associated with each income too
                 curr_rates=_curr_rates_obs,  # Planners see tax rates for each nation
+                gini_weight=self.world.mixing_weights
             )
         # for nation in self.world.planner.state['nations']:
         #     obs['p'][nation] = dict()
         for nation in self.world.planner.state['nations']:
             nation_idx = self.world.planner.state['nation_to_idx'][nation]
+            _curr_incomes = np.zeros(self.world.n_agents)
+            _curr_incomes[self._last_income_nationality_obs_sorted == nation] = self._last_income_obs_sorted[self._last_income_nationality_obs_sorted == nation]
             obs['p'][nation].update(dict(
                 # Add a nation specific observation so they know their own current rates
                 self_curr_rates=_curr_rates_obs[nation_idx * self.n_brackets: (nation_idx + 1) * self.n_brackets],
-                self_last_incomes=self._last_income_obs_sorted[self._last_income_nationality_obs_sorted == nation_idx]
+                self_last_incomes=_curr_incomes,
+                self_gini_weight=self.world.mixing_weights[self.nations_to_idx[nation]]
             ))
 
         for agent in self.world.agents:
@@ -542,7 +546,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
                 is_first_day=is_first_day,
                 tax_phase=tax_phase,
                 last_incomes=self._last_income_obs_sorted,
-                last_nationalities=[self.nations_to_idx[n] for n in self._last_income_nationality_obs_sorted],
+                last_nationalities=self._last_income_nationality_obs_sorted,
                 curr_rates=_curr_rates_obs,  # A flat list of the curr rates of each nation appended in order
                 marginal_rate=curr_marginal_rate,  # The agent's current marginal tax rate
             )
@@ -551,7 +555,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
                 last_income=self._last_income_obs[i],
                 last_marginal_rate=self.last_marginal_rate[i],
                 curr_marginal_rate=curr_marginal_rate,
-                nationality=agent.state['nation']
+                nationality=self.nations_to_idx[agent.state['nation']]
             )
 
         return obs
@@ -653,7 +657,7 @@ class MalthusianPeriodicBracketTax(BaseComponent):
         self.last_coin = [
             float(agent.total_endowment("Coin")) for agent in self.world.agents
         ]
-        self.last_nationality = [a.state['nation'] for a in self.world.agents]
+        self.last_nationality = [self.nations_to_idx[a.state['nation']] for a in self.world.agents]
 
         self.last_income = [0 for _ in range(self.n_agents)]
         self.last_marginal_rate = [0 for _ in range(self.n_agents)]

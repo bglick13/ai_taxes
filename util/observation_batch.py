@@ -60,10 +60,14 @@ class ObservationBatch:
                         if len(self.obs[c].values[0].shape) > 1:
                             continue
                     if isinstance(self.obs[c].values[0], dict):
-                        for key, value in self.obs[c].values[0].items():
-                            new_c = c + '-' + key
-                            self.obs[new_c] = pd.Series([value])
-                            columns.append(new_c)
+                        for nation, nation_dict in self.obs[c].to_dict().items():
+                            for key, value in nation_dict.items():
+                                new_c = c + '-' + key
+                                if new_c not in self.obs.columns:
+                                    self.obs[new_c] = np.nan
+                                    columns.append(new_c)
+                                self.obs.update(pd.DataFrame(data={new_c: [value]}, index=[nation]))
+
                     else:
                         columns.append(c)
             self.flat_inputs = self.obs.loc[:, columns].T.apply(pd.Series.explode).T.fillna(0).values
