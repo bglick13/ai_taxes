@@ -301,6 +301,8 @@ class PPO:
             action_name, action = agent.single_action_map.get(i)
             print(f'{i}: {action_name}: {action}')
         start_time = time.time()
+        if 'linux' in sys.platform:
+            mp.set_start_method('spawn')
         for it in t:
             state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
 
