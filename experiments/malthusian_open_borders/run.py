@@ -8,6 +8,7 @@ from optim.ppo import PPO
 from policies.mobile_agent_neural_net import MobileAgentNeuralNet
 from policies.tax_planner_neural_net import TaxPlannerNeuralNet
 from experiments.malthusian_open_borders.config import env_config
+from components import MalthusianPeriodicBracketTax, OpenBorderCitizenship
 
 if __name__ == '__main__':
     mobile_agent_model = MobileAgentNeuralNet
