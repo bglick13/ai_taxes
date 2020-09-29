@@ -302,7 +302,7 @@ class PPO:
                 continue
             action_name, action = agent.single_action_map.get(i)
             print(f'{i}: {action_name}: {action}')
-
+        start_time = time.time()
         for it in t:
             state_dicts = dict((k, v.to('cpu').state_dict()) for k, v in self.models.items())
 
@@ -335,8 +335,9 @@ class PPO:
                 checkpoint[f'opt_{key}'] = self.optimizers[key].state_dict()
 
                 self.memory[key].clear_memory()
-            if it % 100 == 0:
-                save(checkpoint, f'weights/temp/checkpoint_{it}.torch.temp')
+            if (time.time() - start_time) >= 60 * 60:
+                start_time = time.time()
+                save(checkpoint, f'weights/temp/checkpoint.torch.temp')
             t.refresh()
 
         checkpoint = dict()
