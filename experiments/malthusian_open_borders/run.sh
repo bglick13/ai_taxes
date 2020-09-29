@@ -6,7 +6,7 @@
 #SBATCH --partition=2080ti-long # Partition to submit to
 #
 #SBATCH --ntasks=24
-#SBATCH --mem-per-cpu=4096    # Memory in MB per cpu allocated
+#SBATCH --mem-per-cpu=4000    # Memory in MB per cpu allocated
 
 # Activate Anaconda work environment for OpenDrift
 source /home/${USER}/.bashrc
