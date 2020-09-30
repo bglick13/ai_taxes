@@ -70,7 +70,7 @@ class ObservationBatch:
 
                     else:
                         columns.append(c)
-            self.flat_inputs = self.obs.loc[:, columns].T.apply(pd.Series.explode).T.fillna(0).values
+            self.flat_inputs = self.obs.loc[:, columns].T.dropna().apply(pd.Series.explode).T.fillna(0).values
 
     # def world_map(self):
     #     return self.world_map

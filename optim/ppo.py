@@ -22,6 +22,7 @@ from scenarios import *
 from tutorials.utils.plotting import breakdown
 from util.observation_batch import ObservationBatch
 
+
 current_file_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(current_file_path, '..'))
 warnings.filterwarnings("ignore")
@@ -203,7 +204,19 @@ class PPO:
         obs = env.reset()
         for key, value in models.items():
             self.models[key] = value['constructor'](device=self.device)
-            self.models[key].build_models(ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True))
+            obsObject = ObservationBatch(obs, key, flatten_action_masks=False if 'p' in key else True)
+            self.models[key].build_models(obsObject)
+            # pass in a model to automatically infer the tensor names
+            # model_hcs = (zeros(1, 2 if 'p' in key else len(key), self.models[key].lstm_size, device=device),
+            #              zeros(1, 2 if 'p' in key else len(key), self.models[key].lstm_size, device=device))
+
+            # out = self.models[key](obsObject, model_hcs)
+            # out[1][0].backward()
+            #
+            # # verbose shows how storage is shared across multiple Tensors
+            # if 'p' in key:
+            #     reporter = MemReporter(self.models[key])
+            #     reporter.report(verbose=True)
             self.memory[key] = Memory()
         self.gamma = gamma
         self.clip_param = clip_param
@@ -324,9 +337,10 @@ class PPO:
             for key in self.memory.keys():
                 if 'p' in key:
                     epochs = 1
+                    batch_size = 3000 // len(self.env_config['nations'])
                 else:
                     epochs = 1
-                batch_size = 3000 // len(key)
+                    batch_size = 3000 // len(key)
                 losses, all_rewards = self.update(key, epochs, batch_size)
                 writer.add_scalar(f'Loss/train_{key}', np.mean(losses), it)
                 writer.add_scalar(f'Reward/train_{key}', stack(all_rewards).mean().detach().cpu().numpy().round(3), it)
