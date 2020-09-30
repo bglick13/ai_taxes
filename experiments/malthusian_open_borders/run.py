@@ -14,7 +14,7 @@ import torch.multiprocessing as mp
 
 if __name__ == '__main__':
     if 'linux' in sys.platform:
-        mp.set_start_method('spawn')
+        mp.set_start_method('spawn', force=True)
 
     mobile_agent_model = MobileAgentNeuralNet
     tax_planner_agent_model = TaxPlannerNeuralNet
