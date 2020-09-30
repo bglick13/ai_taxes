@@ -21,7 +21,9 @@ env_config = {
             # (3) Movement and resource collection
             ('Gather', {}),
             ("OpenBorderCitizenship", {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations, 'annealing_steps': 9000}),
-            ('MalthusianPeriodicBracketTax', {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations, 'tax_annealing_schedule': [9000, 0.01]})
+            ('MalthusianPeriodicBracketTax', {'nations': nations, 'nations_to_idx': nations_to_idx, 'idx_to_nations': idx_to_nations,
+                                              'tax_annealing_schedule': [9000, 0.01]
+                                              })
         ],
         'nations': nations,
         'nations_to_idx': nations_to_idx,

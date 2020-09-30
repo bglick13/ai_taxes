@@ -21,9 +21,9 @@ class BaseNeuralNet(nn.Module):
         self.obs = None
 
     def _build_cnn(self):
-        layers = [nn.Conv2d(self.obs.world_map.shape[1], 32, 3),
+        layers = [nn.Conv2d(self.obs.world_map.shape[1], 6, 3),
                    nn.ReLU(),
-                   nn.Conv2d(32, 64, 2),
+                   nn.Conv2d(6, 6, 3),
                    nn.ReLU()]
         self.cnn = nn.Sequential(*layers).to(self.device)
         self.cnn_output_shape = self.cnn(torch.FloatTensor(self.obs.world_map).to(self.device)).shape

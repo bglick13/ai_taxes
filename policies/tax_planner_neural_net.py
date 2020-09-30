@@ -5,6 +5,15 @@ import numpy as np
 
 
 class TaxPlannerNeuralNet(BaseNeuralNet):
+
+    def _build_cnn(self):
+        layers = [nn.Conv2d(self.obs.world_map.shape[1], 6, 6),
+                   nn.ReLU(),
+                   nn.Conv2d(6, 6, 6),
+                   nn.ReLU()]
+        self.cnn = nn.Sequential(*layers).to(self.device)
+        self.cnn_output_shape = self.cnn(torch.FloatTensor(self.obs.world_map).to(self.device)).shape
+
     def _build_action_head(self):
         action_mask = self.obs['action_mask'][0]
         self.action_head = nn.ModuleList([nn.Linear(self.lstm_size, len(am)) for am in action_mask]).to(self.device)
