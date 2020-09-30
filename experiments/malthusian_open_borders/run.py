@@ -9,8 +9,13 @@ from policies.mobile_agent_neural_net import MobileAgentNeuralNet
 from policies.tax_planner_neural_net import TaxPlannerNeuralNet
 from experiments.malthusian_open_borders.config import env_config
 from components import MalthusianPeriodicBracketTax, OpenBorderCitizenship
+import torch.multiprocessing as mp
+
 
 if __name__ == '__main__':
+    if 'linux' in sys.platform:
+        mp.set_start_method('spawn')
+
     mobile_agent_model = MobileAgentNeuralNet
     tax_planner_agent_model = TaxPlannerNeuralNet
     agent_spec = {
