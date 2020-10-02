@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
+from torch.cuda import is_available, device_count, current_device
 from ai_economist import foundation
 from torch import stack, zeros, clamp, min, save, load
 from torch.nn.utils import clip_grad_norm_
@@ -295,6 +296,9 @@ class PPO:
         rollouts_per_jobs = 1
         n_rollouts_per_training_step = n_jobs
         steps_per_rollouts = 1000
+        print(f'cuda avaialble: {is_available()}')
+        print('Available devices ', device_count())
+        print('Current cuda device ', current_device())
 
         def completion_number(it, job_idx):
             return it * n_rollouts_per_training_step * rollouts_per_jobs + job_idx
